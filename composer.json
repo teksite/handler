@@ -1,0 +1,30 @@
+{
+    "name": "teksite/handler",
+    "description": "Some features to handle Laravel codes better",
+    "authors": [
+        {
+            "name": "Sina Zangiband",
+            "email": "sina.zangiband@gmail.com"
+        }
+    ],
+    "version": "0.0.1",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Teksite\\Handler\\": "src/",
+            "Teksite\\Handler\\Services\\": "src/Services/",
+            "Teksite\\Handler\\Actions\\": "src/Actions/"
+        }
+    },
+    "require": {
+        "php": "^8.2",
+        "illuminate/support": "~11.0"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Teksite\\Handler\\ModuleServiceProvider"
+            ]
+        }
+    }
+}
