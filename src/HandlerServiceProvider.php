@@ -4,7 +4,7 @@ namespace Teksite\Handler;
 
 use Illuminate\Support\ServiceProvider;
 
-class ModuleServiceProvider extends ServiceProvider
+class HandlerServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
