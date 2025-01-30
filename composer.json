@@ -23,7 +23,7 @@
     "extra": {
         "laravel": {
             "providers": [
-              "HandlerServiceProvider"
+              "Teksite\\Handler\\HandlerServiceProvider"
             ]
         }
     }
