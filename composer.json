@@ -7,8 +7,7 @@
             "email": "sina.zangiband@gmail.com"
         }
     ],
-    "version": "0.0.3",
-    "minimum-stability": "dev",
+
     "license": "MIT",
     "autoload": {
         "psr-4": {
