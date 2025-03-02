@@ -10,20 +10,39 @@ use Illuminate\Support\Facades\Log;
 
 class ServiceWrapper
 {
+    /**
+     * @param Closure $closure
+     * @param Closure|null $errorHandler
+     * @param bool $hasTransaction
+     * @param bool $withHandler
+     * @return ServiceResult
+     */
     public function __invoke(Closure $closure, ?Closure $errorHandler = null, bool $hasTransaction = true, bool $withHandler = true): ServiceResult
     {
-        if ($withHandler) {
+        $isActiveWrapper=config('handler-settings.wrapper' ,true);
+        
+        if ($withHandler && $isActiveWrapper) {
             return $this->executeWithHandler($closure, $errorHandler, $hasTransaction);
         }
 
         return $this->onlyExecute($closure);
     }
 
+    /**
+     * @param Closure $closure
+     * @return ServiceResult
+     */
     private function onlyExecute(Closure $closure): ServiceResult
     {
         return new ServiceResult(true, $closure());
     }
 
+    /**
+     * @param Closure $closure
+     * @param Closure|null $errorHandler
+     * @param bool $hasTransaction
+     * @return ServiceResult
+     */
     private function executeWithHandler(Closure $closure, ?Closure $errorHandler, bool $hasTransaction): ServiceResult
     {
         if ($hasTransaction) {
@@ -32,6 +51,11 @@ class ServiceWrapper
         return $this->executeWithoutTransaction($closure, $errorHandler);
     }
 
+    /**
+     * @param Closure $closure
+     * @param Closure|null $errorHandler
+     * @return ServiceResult
+     */
     private function executeWithTransaction(Closure $closure, ?Closure $errorHandler): ServiceResult
     {
 
@@ -46,6 +70,11 @@ class ServiceWrapper
         }
     }
 
+    /**
+     * @param Closure $closure
+     * @param Closure|null $errorHandler
+     * @return ServiceResult
+     */
     private function executeWithoutTransaction(Closure $closure, ?Closure $errorHandler): ServiceResult
     {
         try {
@@ -55,6 +84,11 @@ class ServiceWrapper
         }
     }
 
+    /**
+     * @param Closure|null $errorHandler
+     * @param Exception $exception
+     * @return ServiceResult
+     */
     private function handleError(?Closure $errorHandler , Exception $exception): ServiceResult
     {
         if ($errorHandler) $errorHandler();

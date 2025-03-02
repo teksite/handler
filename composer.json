@@ -10,9 +10,7 @@
     "license": "MIT",
     "autoload": {
         "psr-4": {
-            "Teksite\\Handler\\": "src/",
-            "Teksite\\Handler\\Services\\": "src/Services/",
-            "Teksite\\Handler\\Actions\\": "src/Actions/"
+            "Teksite\\Handler\\": "src/"
         }
     },
     "require": {
