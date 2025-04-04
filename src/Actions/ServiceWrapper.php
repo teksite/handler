@@ -19,8 +19,13 @@ class ServiceWrapper
      */
     public function __invoke(Closure $closure, ?Closure $errorHandler = null, bool $hasTransaction = true, bool $withHandler = true): ServiceResult
     {
+       return $this->execute($closure, $errorHandler, $hasTransaction, $withHandler);
+    }
+
+    public function execute(Closure $closure, ?Closure $errorHandler = null, bool $hasTransaction = true, bool $withHandler = true): ServiceResult
+    {
         $isActiveWrapper=config('handler-settings.wrapper' ,true);
-        
+
         if ($withHandler && $isActiveWrapper) {
             return $this->executeWithHandler($closure, $errorHandler, $hasTransaction);
         }

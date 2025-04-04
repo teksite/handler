@@ -4,16 +4,16 @@ namespace Teksite\Handler\Services;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
-
 
 class FetchDataService
 {
     protected int $perPage;
     protected bool $limitPagination;
+    protected string $defaultOrderColumn = 'created_at';
+    protected string $defaultSortDirection = 'desc';
 
     public function __construct()
     {
@@ -22,15 +22,15 @@ class FetchDataService
     }
 
     /**
-     * Main entry point for fetching data either by model or closure.
+     * Main entry point for fetching data either by model, closure, or query builder.
      *
-     * @param string|Closure $model The model or closure to use for fetching.
+     * @param string|Closure|Builder $model The model, closure, or query builder to use for fetching.
      * @param string|array|Closure|null $searchColumns The columns to search in.
      * @param array $only Columns to select.
      * @param int|null $pagination Pagination limit.
      * @return mixed
      */
-    public function __invoke(string|Closure $model, string|array|Closure|null $searchColumns = ['title'], array $only = ['*'], ?int $pagination = null): mixed
+    public function __invoke(string|Closure|Builder $model, string|array|Closure|null $searchColumns = ['title'], array $only = ['*'], ?int $pagination = null): mixed
     {
         if (is_string($model)) {
             return $this->getFromModel($model, $searchColumns, $only, $pagination);
@@ -40,8 +40,11 @@ class FetchDataService
             return $this->getFromClosure($model);
         }
 
-        // Handle unexpected cases.
-        throw new InvalidArgumentException('Invalid model or closure provided.');
+        if ($model instanceof Builder) {
+            return $this->getFromQueryBuilder($model, $searchColumns, $only, $pagination);
+        }
+
+        throw new InvalidArgumentException('Invalid model, closure, or query builder provided.');
     }
 
     /**
@@ -52,11 +55,11 @@ class FetchDataService
      */
     private function getFromClosure(Closure $model)
     {
-        return $model(); // Execute closure to fetch data.
+        return $model();
     }
 
     /**
-     * Fetch data from a model with optional search and pagination.
+     * Fetch data from a model with optional search, sorting, and pagination.
      *
      * @param string|Model $model The model or its name.
      * @param array $searchColumns Columns to search by.
@@ -66,10 +69,46 @@ class FetchDataService
      */
     private function getFromModel(string|Model $model, array $searchColumns = [], array $only = ['*'], ?int $pagination = null)
     {
-        $query = $this->only($model, $only); // Apply column selection.
-        $query = $this->applySearch($query, $searchColumns); // Apply search filters.
+        $query = $this->only($model, $only);
+        $query = $this->applySearch($query, $searchColumns);
+        $query = $this->applySorting($query);
+        $query = $this->applyFilters($query);
 
-        return $this->applyPagination($query, $pagination); // Apply pagination.
+        return $this->applyPagination($query, $pagination);
+    }
+
+    /**
+     * Fetch data from a query builder with optional search, sorting, and pagination.
+     *
+     * @param Builder $query The query builder instance.
+     * @param array $searchColumns Columns to search by.
+     * @param array $only Columns to select.
+     * @param int|null $pagination Pagination limit.
+     * @return mixed
+     */
+    private function getFromQueryBuilder(Builder $query, array $searchColumns = [], array $only = ['*'], ?int $pagination = null)
+    {
+        $query = $this->applyColumnsToBuilder($query, $only);
+        $query = $this->applySearch($query, $searchColumns);
+        $query = $this->applySorting($query);
+        $query = $this->applyFilters($query);
+
+        return $this->applyPagination($query, $pagination);
+    }
+
+    /**
+     * Apply column selection to an existing query builder.
+     *
+     * @param Builder $query The query builder instance.
+     * @param array $only Columns to select.
+     * @return Builder
+     */
+    private function applyColumnsToBuilder(Builder $query, array $only = ['*']): Builder
+    {
+        if ($only !== ['*']) {
+            $query->select($only);
+        }
+        return $query;
     }
 
     /**
@@ -81,12 +120,10 @@ class FetchDataService
      */
     private function applySearch(Builder $query, array $searchColumns = []): Builder
     {
-        // Retrieve search keyword from request if present.
         $keyword = request('s');
 
         if ($keyword) {
             foreach ($searchColumns as $index => $column) {
-                // Handle both string and array-based column search conditions.
                 if (is_string($column)) {
                     $query = $this->applySearchForColumn($query, $column, $keyword, $index);
                 } elseif (is_array($column)) {
@@ -126,10 +163,9 @@ class FetchDataService
      */
     private function applyAdvancedSearchForColumn(Builder $query, array $column, string $keyword, int $index): Builder
     {
-        // Use specified column, operation, and apply LIKE or exact match.
         $columnName = $column['column'] ?? $column[0];
         $operator = $column['operation'] ?? $column[1] ?? '=';
-        $value = $column['operation'] ?? $column[1] === 'LIKE' ? "%$keyword%" : $keyword;
+        $value = ($operator === 'LIKE') ? "%$keyword%" : $keyword;
 
         return $index === 0 ? $query->where($columnName, $operator, $value) : $query->orWhere($columnName, $operator, $value);
     }
@@ -147,6 +183,21 @@ class FetchDataService
     }
 
     /**
+     * Apply sorting to the query based on request parameters.
+     *
+     * @param Builder $query The query builder instance.
+     * @return Builder
+     */
+    private function applySorting(Builder $query): Builder
+    {
+        $orderColumn = request('order', $this->defaultOrderColumn);
+        $sortDirection = request('sort', $this->defaultSortDirection);
+        $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
+
+        return $query->orderBy($orderColumn, $sortDirection);
+    }
+
+    /**
      * Apply pagination logic to the query.
      *
      * @param Builder $query The query builder instance.
@@ -155,38 +206,20 @@ class FetchDataService
      */
     private function applyPagination(Builder $query, ?int $pagination = null)
     {
-        if ($pagination) {
-            return $pagination >= 0 ? $query->paginate($pagination) : $query->get();
-        }
         $requestedPagination = $pagination ?? request()->get('pagination', $this->perPage);
-
-
-        // Determine pagination limit based on config.
         $paginatingBy = $this->limitPagination ? min($requestedPagination, 250) : $requestedPagination;
-        // Return paginated results if pagination is valid, otherwise return all results.
+
         return $paginatingBy ? $query->paginate($paginatingBy) : $query->get();
-
-
-
     }
 
     /**
-     * Cache the query result for performance optimization.
+     * Apply additional filters to the query.
      *
      * @param Builder $query The query builder instance.
-     * @param string $cacheKey The cache key.
-     * @param int $ttl Cache time-to-live in minutes.
-     * @return mixed
+     * @return Builder
      */
-    private function cacheQuery(Builder $query, string $cacheKey, int $ttl = 60)
+    private function applyFilters(Builder $query): Builder
     {
-        return cache()->remember($cacheKey, $ttl, fn() => $query->get());
-    }
-
-
-    private function applyFilters(Builder $query)
-    {
-        // Example: Filtering by date range.
         if ($startDate = request('start_date')) {
             $query->where('created_at', '>=', $startDate);
         }
