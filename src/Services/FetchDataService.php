@@ -1,9 +1,11 @@
 <?php
+
 namespace Teksite\Handler\Services;
 
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -30,23 +32,29 @@ class FetchDataService
      * @param int|null $pagination Pagination limit.
      * @return mixed
      */
-    public function __invoke(string|Closure|Builder $model, string|array|Closure|null $searchColumns = ['title'], array $only = ['*'], ?int $pagination = null): mixed
+    public function __invoke(string|Closure|Builder|Relation $model, string|array|Closure|null $searchColumns = ['title'], array $only = ['*'], ?int $pagination = null): mixed
     {
         if (is_string($model)) {
             return $this->getFromModel($model, $searchColumns, $only, $pagination);
-        }
-
-        if ($model instanceof Closure) {
+        } elseif ($model instanceof Closure) {
             return $this->getFromClosure($model);
-        }
-
-        if ($model instanceof Builder) {
+        } elseif ($model instanceof Builder) {
             return $this->getFromQueryBuilder($model, $searchColumns, $only, $pagination);
+        }elseif ($model instanceof Relation){
+            return $this->getFromRelation($model, $searchColumns, $only, $pagination);
         }
-
         throw new InvalidArgumentException('Invalid model, closure, or query builder provided.');
     }
+    private function getFromRelation(Relation $model , array $searchColumns = [], array $only = ['*'], ?int $pagination = null)
+    {
+        $query=$model;
+        $query = $this->applyColumnsToBuilder($query, $only);
+        $query = $this->applySearch($query, $searchColumns);
+        $query = $this->applySorting($query);
+        $query = $this->applyFilters($query);
 
+        return $this->applyPagination($query, $pagination);
+    }
     /**
      * Fetch data from closure.
      *
@@ -103,7 +111,7 @@ class FetchDataService
      * @param array $only Columns to select.
      * @return Builder
      */
-    private function applyColumnsToBuilder(Builder $query, array $only = ['*']): Builder
+    private function applyColumnsToBuilder(Builder|Relation $query, array $only = ['*']): Builder|Relation
     {
         if ($only !== ['*']) {
             $query->select($only);
@@ -118,7 +126,7 @@ class FetchDataService
      * @param array $searchColumns Columns to search by.
      * @return Builder
      */
-    private function applySearch(Builder $query, array $searchColumns = []): Builder
+    private function applySearch(Builder|Relation $query, array $searchColumns = []): Builder|Relation
     {
         $keyword = request('s');
 
@@ -144,7 +152,7 @@ class FetchDataService
      * @param int $index The index of the column to determine if `orWhere` is needed.
      * @return Builder
      */
-    private function applySearchForColumn(Builder $query, string $column, string $keyword, int $index): Builder
+    private function applySearchForColumn(Builder|Relation $query, string $column, string $keyword, int $index): Builder|Relation
     {
         $operator = 'LIKE';
         $value = "%$keyword%";
@@ -161,7 +169,7 @@ class FetchDataService
      * @param int $index The index of the column.
      * @return Builder
      */
-    private function applyAdvancedSearchForColumn(Builder $query, array $column, string $keyword, int $index): Builder
+    private function applyAdvancedSearchForColumn(Builder|Relation $query, array $column, string $keyword, int $index): Builder|Relation
     {
         $columnName = $column['column'] ?? $column[0];
         $operator = $column['operation'] ?? $column[1] ?? '=';
@@ -177,7 +185,7 @@ class FetchDataService
      * @param array $only Columns to select.
      * @return Builder
      */
-    private function only(string|Model $model, array $only = ['*']): Builder
+    private function only(string|Model $model, array $only = ['*']): Builder|Relation
     {
         return $model instanceof Model ? $model->select($only) : (new $model)->select($only);
     }
@@ -188,7 +196,7 @@ class FetchDataService
      * @param Builder $query The query builder instance.
      * @return Builder
      */
-    private function applySorting(Builder $query): Builder
+    private function applySorting(Builder|Relation $query): Builder|Relation
     {
         $orderColumn = request('order', $this->defaultOrderColumn);
         $sortDirection = request('sort', $this->defaultSortDirection);
@@ -204,7 +212,7 @@ class FetchDataService
      * @param int|null $pagination The requested pagination size.
      * @return LengthAwarePaginator|Collection
      */
-    private function applyPagination(Builder $query, ?int $pagination = null)
+    private function applyPagination(Builder|Relation $query, ?int $pagination = null)
     {
         $requestedPagination = $pagination ?? request()->get('pagination', $this->perPage);
         $paginatingBy = $this->limitPagination ? min($requestedPagination, 250) : $requestedPagination;
@@ -218,7 +226,7 @@ class FetchDataService
      * @param Builder $query The query builder instance.
      * @return Builder
      */
-    private function applyFilters(Builder $query): Builder
+    private function applyFilters(Builder|Relation $query): Builder|Relation
     {
         if ($startDate = request('start_date')) {
             $query->where('created_at', '>=', $startDate);
