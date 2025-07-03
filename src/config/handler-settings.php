@@ -13,6 +13,8 @@ return [
     */
     "pagination" => 50, //number of items per page
 
+    "client-pagination" => 25, //number of items per page in client side
+
     'limit-pagination' => true, // to prevent data usage max number of items is 250
 
     /*
