@@ -156,19 +156,18 @@ class ResponderServices
      * @return static|JsonResponse|Redirector|RedirectResponse
      */
     public function fromResult(
-        ServiceResult $result,
+        ServiceResult     $result,
         null|string|array $success_message = null,
         null|string|array $failed_message = null,
-        ?string $success_route = null,
-        ?string $failed_route = null,
-        bool $autoReply = false
-    ): static|JsonResponse|Redirector|RedirectResponse {
+        ?string           $success_route = null,
+        ?string           $failed_route = null,
+        bool              $autoReply = false
+    ): static|JsonResponse|Redirector|RedirectResponse
+    {
         if ($result->success === true) {
-            $this->success($success_message ?? __('successfully done'), $result->result, $result->successStatus ?? 200)
-                ->route($success_route);
+            $this->success($success_message ?? __('successfully done'), $result->result, $result->successStatus ?? 200)->route($success_route);
         } else {
-            $this->failed($failed_message ?? __('something went wrong'), $result->result, $result->failedStatus ?? 500)
-                ->route($failed_route);
+            $this->failed($failed_message ?? __('something went wrong'), $result->result, $result->failedStatus ?? 500)->route($failed_route);
         }
         if ($autoReply) {
             return $this->responder->getRoute() ? $this->go() : $this->reply();
