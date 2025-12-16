@@ -163,7 +163,7 @@ class ResponderServices
         ?string $failed_route = null,
         bool $autoReply = false
     ): static|JsonResponse|Redirector|RedirectResponse {
-        if ($result->success) {
+        if ($result->success === true) {
             $this->success($success_message ?? __('successfully done'), $result->result, $result->successStatus ?? 200)
                 ->route($success_route);
         } else {
