@@ -121,13 +121,14 @@ class ResponderServices
 
     /**
      * @param string|array $message
-     * @param mixed $data
+     * @param string|array $errors
      * @param int $status
+     * @param mixed $data
      * @return $this
      */
-    public function failed(string|array $message = 'failed', mixed $data = [], int $status = 403): static
+    public function failed(string|array $message = 'failed', string|array $errors = [], int $status = 403, mixed $data = []): static
     {
-        return $this->type(ResponseType::FAILED)->statusCode($status)->data($data)->message($message);
+        return $this->type(ResponseType::FAILED)->statusCode($status)->data($data)->message($message)->error($errors);
     }
 
 
@@ -137,9 +138,9 @@ class ResponderServices
     private function setResponse(ResponseType $type, string|array $message, mixed $data = null, int $status = 200): static
     {
         return $this->type($type)
-            ->message($message)
-            ->data($data)
-            ->statusCode($status);
+                    ->message($message)
+                    ->data($data)
+                    ->statusCode($status);
     }
 
     /** ===== ServiceResult Integration ===== */
@@ -167,7 +168,7 @@ class ResponderServices
         if ($result->success === true) {
             $this->success($success_message ?? __('successfully done'), $result->result, $result->successStatus ?? 200)->route($success_route);
         } else {
-            $this->failed($failed_message ?? __('something went wrong'), $result->result, $result->failedStatus ?? 500)->route($failed_route);
+            $this->failed($failed_message ?? __('something went wrong'), ['server' => __('something went wrong')], $result->failedStatus ?? 500)->route($failed_route);
         }
         if ($autoReply) {
             return $this->responder->getRoute() ? $this->go() : $this->reply();

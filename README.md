@@ -12,7 +12,6 @@ database querying, and other utility functions.
 - [Contact](#contact)
 - [Installation](#installation)
 - [Features](#features)
-- [Usage](#usage)
 - [Support](#support)
 
 ## About
@@ -68,36 +67,83 @@ Add the service provider to the `bootstrap/providers.php` file:
 
 ## Features
 
-- Simplify exception handling.
+### Simplify exception handling.
 
 ```php
 \Teksite\Handler\Actions\ServiceWrapper
 ```
 
-example
+example:
 
 ```php
- return app(ServiceWrapper::class)(function () use ($inputs, $post) {
-       $post->update(Arr::except($inputs, ['tag', 'meta', 'seo']));
-       return $post;
- });
+
+ return ServiceWrapper::make()->do(function (){
+    // your code
+ })->ifFailed(function(){
+    //in case your code failed
+ })->run();
+
 ```
 
-- Streamlined methods for querying and fetching data.
+- in this code :
+    - `do()` is necessary, and it is your main code to be processed in try-catch
+    - `ifFailed` is run if your code fails, the error is log in laravel.log
+    - you can ignore error handling by setting `$withHandler false` : `ServiceWrapper::make(withHandler: false)`
+    - by default db transaction is active to set it off : `ServiceWrapper::make(hasTransaction: false)`
+    - also by default the output of the `do` and is `ifFailed` is instance of `ServiceResult` to have integrated result.
+      set it off by `ServiceWrapper::make(wrapServiceResult: false)`
+    - all these configs can be set globally in `handler-settings.transaction` config file
+
+### Streamlined methods for querying and fetching data.
 
 ```php
 \Teksite\Handler\Services\FetchDataService
 ```
 
-example
+example of ServiceWrapper and FetchDataService
 
 ```php
-  public function get(mixed $fetchData = [])
-  {
-      return app(ServiceWrapper::class)(function () use ($fetchData) {
-          return app(FetchDataService::class)(Post::class, ['title'], ...$fetchData);
-      });
-  }
+ //
+ public function get(mixed $fetchData = []){
+    ServiceWrapper::make()->do(function () use ($fetchData){
+        FetchDataService::get(Post::class, ['title'], ...$fetchData);
+    })->ifFailed(function(){
+    //in case your code failed
+    })->run();
+ });
+}
+
+
+```
+
+- in this code:
+
+    - you can only use `FetchDataService::get(Post::class, ['title'], ...$fetchData)` without ServiceWrapper class.
+    - the arguments of this method are:
+        - `string|Closure|Builder|Relation $model`: to get query from class or relation or model,`
+        - `string|array|Closure|null $searchColumns`: search in column, to implement operators you can
+          `$searchColumns = [['column'=>'title' , 'operator'=>'LIKE' ] , ['category'=>'=']`,
+        - `array  $only = ['*']` : select desired columns,
+        - `null|int|false $perPage = null` : number of records per page (can be changed in handler-settings.pagination
+          config file),
+        - `null|false|int  $limitPagination = null` : it is used to limit client to get large amount records per page (
+          can be change in handler-settings.limit-pagination config file)
+
+### Response by json or http
+
+```
+    // sucess message
+    $response =ResponderServices::success('weldone' ,['post=>$post] , 201);
+    
+    // failed message
+    $response =ResponderServices::failed('something went wrong' , ['auth'=> 'forbidden' , ...] ,500);
+
+    // to redirct client as http response 
+    $response->go();
+    
+    // to respone as json in api and ajax senario
+    $response->reoly()
+
 ```
 
 ### Configuration
