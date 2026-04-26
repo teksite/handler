@@ -2,7 +2,7 @@
 return [
     /*
     |--------------------------------------------------------------------------
-    | Pagination
+    | FetchDara
     |--------------------------------------------------------------------------
     |
     | "pagination" This value is the number of items per page.
@@ -17,6 +17,7 @@ return [
 
     'limit-pagination' => env('PAGINATE_LIMITATION', 250), // to prevent data usage max number of items is 250
 
+    'search_input_field'   => 's', // search based on the input of request
     /*
     |--------------------------------------------------------------------------
     | wrapper
@@ -30,8 +31,8 @@ return [
     |
     |
     */
-    "wrapper"          => env('HANDLER_WRAPPER', true),
-    "transaction"      => env('HANDLER_TRANSACTION', true),
-    "service_result"      => env('HANDLER_USE_RESULT_SERVICE', true),
-    "service_result_class"      => \Teksite\Handler\Actions\ServiceResult::class,
+    "wrapper"              => env('HANDLER_WRAPPER', true),
+    "transaction"          => env('HANDLER_TRANSACTION', true),
+    "service_result"       => env('HANDLER_USE_RESULT_SERVICE', true),
+    "service_result_class" => \Teksite\Handler\Actions\ServiceResult::class,
 ];

@@ -8,106 +8,127 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
 class FetchDataService
 {
-    protected int $perPage;
-    protected bool $limitPagination;
-
-    public function __construct()
-    {
-        $this->perPage = config('cms-settings.pagination', 20);
-        $this->limitPagination = config('cms-settings.limit-pagination', true);
-    }
 
     /**
      * Main entry point for fetching data.
      */
-    public function __invoke(
+    public static function get(
         string|Closure|Builder|Relation $model,
         string|array|Closure|null       $searchColumns = ['title'],
         array                           $only = ['*'],
-        ?int                            $pagination = null
+        null|int|false                  $perPage = null,
+        null|false|int                  $limitPagination = null
     ): mixed
     {
-        if ($model instanceof Closure) {
-            return $this->getFromClosure($model);
-        }
+        if ($model instanceof Closure) return self::executeClosure($model);
 
-        if ($model instanceof Builder || $model instanceof Relation || is_string($model) || $model instanceof Model) {
-            return $this->getFromModel($model, $searchColumns, $only, $pagination);
-        }
+        $perPage =request()->integer('per_page')
+            ?? (is_null($perPage)  ? config('handler-settings.pagination', 25) : $perPage);
 
-        throw new InvalidArgumentException('Invalid model, builder, relation or closure provided.');
+        $limitPagination = is_null($limitPagination)
+            ? config('handler-settings.limit-pagination', 250)
+            : $limitPagination;
+
+        $query = self::getQueryBuilder($model);
+
+        if ($searchColumns) $query = self::applySearch($query, (array)$searchColumns);
+
+        $query = self::applyingSelection($query, $only);
+
+        $query = self::applyOrdering($query);
+
+        return self::applyPagination($query, $perPage , $limitPagination);
     }
+
 
     /**
      * Fetch data from closure.
      */
-    private function getFromClosure(Closure $closure): mixed
+    private static function executeClosure(Closure $closure): mixed
     {
         return $closure();
     }
 
+
     /**
-     * Fetch data from model / relation / builder.
+     * Converts various model types into an Eloquent Query Builder instance.
+     *
+     * Handles Eloquent models, relations, and query builders directly.
+     *
+     * @param string|Model|Builder|Relation $model The Eloquent model, relation, or builder.
+     *
+     * @return Builder Returns an Eloquent Query Builder instance.
+     *
+     * @throws InvalidArgumentException If the provided model type is not supported.
      */
-    private function getFromModel(
-        string|Model|Builder|Relation $model,
-        string|array|Closure|null     $searchColumns,
-        array                         $only,
-        ?int                          $pagination
-    ): mixed
+    private static function getQueryBuilder(string|Model|Builder|Relation $model): Builder
     {
-        // Convert input into a Builder
-        if ($model instanceof Relation) {
-            $query = $model->getQuery();
-        } elseif ($model instanceof Builder) {
-            $query = $model;
-        } elseif ($model instanceof Model) {
-            $query = $model->newQuery();
-        } else {
-            $query = (new $model)->newQuery();
-        }
 
-        $query->select($only);
+        return match (true) {
+            $model instanceof Builder  => $model,
+            $model instanceof Relation => $model->getQuery(),
+            $model instanceof Model    => $model->newQuery(),
+            is_string($model)          => (new $model())->newQuery(),
+            default                    => new InvalidArgumentException('Invalid model, builder, or relation provided.')
+        };
 
-        // Apply search
-        if ($searchColumns) {
-            $query = $this->applySearch($query, (array)$searchColumns);
-        }
-        $query = $this->applyOrdering($query);
-
-        return $this->applyPagination($query, $pagination);
     }
 
     /**
-     * Apply search filters.
+     * @param Builder $query
+     * @param string|array $only
+     * @return Builder
      */
-    private function applySearch(Builder $query, array $searchColumns): Builder
+    private static function applyingSelection(Builder $query, string|array $only = ['*']): Builder
     {
-        $keyword = request('s');
+        $only = is_array($only) ? $only : [$only];
+        $query->select($only);
 
-        if (!$keyword) {
-            return $query;
-        }
+        return $query;
+    }
 
-        $query->where(function ($q) use ($searchColumns, $keyword) {
-            foreach ($searchColumns as $index => $column) {
-                if (is_string($column)) {
-                    $index === 0
-                        ? $q->where($column, 'LIKE', "%$keyword%")
-                        : $q->orWhere($column, 'LIKE', "%$keyword%");
-                } elseif (is_array($column)) {
-                    $col = $column['column'] ?? $column[0];
-                    $op = $column['operation'] ?? $column[1] ?? '=';
-                    $val = ($op === 'LIKE') ? "%$keyword%" : $keyword;
 
-                    $index === 0
-                        ? $q->where($col, $op, $val)
-                        : $q->orWhere($col, $op, $val);
+    /**
+     * Applies search filters to the query builder based on request parameters.
+     *
+     * Searches across specified columns using a LIKE clause.
+     *
+     * @param Builder $query The Eloquent query builder instance.
+     * @param array $searchColumns An array of column names or column definitions to search within.
+     *
+     * @return Builder The query builder with search conditions applied.
+     */
+    private static function applySearch(Builder $query, array $searchColumns): Builder
+    {
+        $searchInputField = config('handler-settings.search_input_field', 's');
+        $keyword = request()->input($searchInputField);
+
+        if (!$keyword) return $query;
+
+        $query->where(function (Builder $q) use ($searchColumns, $keyword) {
+            foreach ($searchColumns as $index => $columnDefinition) {
+
+
+                if (is_array($columnDefinition)) {
+                    $column = $columnDefinition['column'] ?? $columnDefinition[0];
+                    $operator = $columnDefinition['operation'] ?? $columnDefinition[1] ?? 'LIKE';
+                    $value = ($operator === 'LIKE') ? "%{$keyword}%" : ($columnDefinition['value'] ?? $keyword);
+                } else {
+                    $column = $columnDefinition;
+                    $operator = 'LIKE';
+                    $value = "%{$keyword}%";
+                }
+
+                if ($index === 0) {
+                    $q->where($column, $operator, $value);
+                } else {
+                    $q->orWhere($column, $operator, $value);
                 }
             }
         });
@@ -115,45 +136,65 @@ class FetchDataService
         return $query;
     }
 
+
     /**
-     * Apply pagination.
+     * Applies ordering to the query builder based on request parameters.
+     *
+     * Defaults to ordering by 'created_at' descending. Allows specifying 'order' and 'sort' parameters.
+     * Validates that the order column exists in the table.
+     *
+     * @param Builder $query The Eloquent query builder instance.
+     *
+     * @return Builder The query builder with ordering conditions applied.
+     * @throws \Exception
      */
-    private function applyPagination(Builder $query, ?int $pagination): LengthAwarePaginator|Collection
+    private static function applyOrdering(Builder $query): Builder
     {
-        if ($pagination === 0) {
-            return $query->get();
-        }
+        $orderBy = request()->input('order', 'created_at');
+        $sort = strtolower(request()->input('sort', 'desc'));
 
-        $requested = $pagination ?? request()->integer('pagination', $this->perPage);
-        $limit = $this->limitPagination ? min($requested, 250) : $requested;
-
-        return $limit > 0 ? $query->paginate($limit) : $query->get();
-    }
-
-
-
-    private function applyOrdering(Builder $query): Builder
-    {
-        $orderBy = request()->get('order' ,'created_at');
-        $sort = request()->get('sort' ,'desc');
-
-        if (!$orderBy) {
-            return $query;
-        }
-
-        // Default sort rules
         if ($orderBy === 'created_at') {
             $sort = $sort === 'asc' ? 'asc' : 'desc'; // default desc
         } else {
             $sort = $sort === 'desc' ? 'desc' : 'asc'; // default asc
         }
 
-        // Validate column exists to avoid SQL errors
+        // Check if the column exists in the table before applying orderBy to prevent SQL errors
         $model = $query->getModel();
         if (Schema::hasColumn($model->getTable(), $orderBy)) {
             $query->orderBy($orderBy, $sort);
+        } else {
+            Log::warning("Attempted to order by non-existent column: {$orderBy} on table {$model->getTable()}");
+            throw new \Exception('Attempted to order by non-existent column: ' . $orderBy);
         }
 
         return $query;
     }
+
+
+    /**
+     * Applies pagination to the query builder.
+     *
+     * Determines the number of items per page based on the $pagination parameter,
+     * request parameter, or class defaults. Optionally limits pagination to a maximum.
+     * If $pagination is 0, all results are returned without pagination.
+     *
+     * @param Builder $query The Eloquent query builder instance.
+     * @param int|false $perPage
+     * @param int|false $limitPagination
+     * @return LengthAwarePaginator|Collection Returns a paginator instance or a collection of results.
+     */
+    private static function applyPagination(Builder $query, int|false $perPage, int|false $limitPagination): LengthAwarePaginator|Collection
+    {
+
+        if ($perPage === false) {
+            return $limitPagination === false ? $query->get() : $query->limit($limitPagination)->get();
+        }
+
+        $limit = $limitPagination ? min($perPage, $limitPagination) : $perPage;
+
+        return $limit ? $query->paginate($limit) : $query->get();
+    }
+
+
 }
