@@ -5,14 +5,14 @@ namespace Teksite\Handler\Services;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Redirector;
-use Teksite\Lareon\Enums\ResponseType;
+use Teksite\Handler\Enums\ResponseType;
 
 class ResponderServices
 {
     private ?string $title = null;
     private array $message = [];
     private array $error = [];
-    private ?ResponseType $type = null;
+    private null|ResponseType $type = null;
     private null|int|string $statusCode  = 200;
     private mixed $data = null;
     private ?string $route = null;
@@ -28,7 +28,7 @@ class ResponderServices
     /**
      * Set status code
      */
-    public function setStatusCode(int|string|null $statusCode=null): static
+    public function setStatusCode(int|null $statusCode=null): static
     {
         $this->statusCode = $statusCode;
         return $this;
@@ -38,7 +38,7 @@ class ResponderServices
      */
     public function setMessage(null|array|string $message = null): static
     {
-        if ($message !== null) {
+        if (!empty($message)) {
             $this->message = array_merge($this->message, (array)$message);
         }
         return $this;
@@ -107,7 +107,7 @@ class ResponderServices
      */
     public function redirecting(): Redirector|RedirectResponse
     {
-        $redirect = $this->route ? redirect($this->route) : redirect()->back();
+        $redirect = $this->getRoute() ? redirect()->to($this->route) : redirect()->back();
         return $redirect->with(['reply' => $this->toArray()]);
     }
 

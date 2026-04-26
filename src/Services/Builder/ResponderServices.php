@@ -7,7 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Redirector;
 use Teksite\Handler\Actions\ServiceResult;
 use Teksite\Handler\Services\ResponderServices as Service;
-use Teksite\Lareon\Enums\ResponseType;
+use Teksite\Handler\Enums\ResponseType;
 
 class ResponderServices
 {
