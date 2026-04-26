@@ -10,93 +10,85 @@ use Illuminate\Support\Facades\Log;
 
 class ServiceWrapper
 {
+    private Closure|null $onSuccess = null;
+    private Closure|null $onFailure = null;
+
     /**
-     * @param Closure $closure
-     * @param Closure|null $errorHandler
+     * @param bool $useTransaction
+     * @param bool $useHandler
+     * @param bool $wrapServiceResult
+     */
+    public function __construct(private bool $useTransaction = true, private bool $wrapServiceResult = true, private bool $useHandler = true)
+    {
+    }
+
+    /**
      * @param bool $hasTransaction
      * @param bool $withHandler
-     * @param int $successStatus
-     * @return ServiceResult
+     * @param bool $wrapServiceResult
+     * @return self
      */
-    public function __invoke(Closure $closure, ?Closure $errorHandler = null, bool $hasTransaction = true, bool $withHandler = true ,int $successStatus=200): ServiceResult
+    public static function make(bool $hasTransaction = true, bool $wrapServiceResult = true, bool $withHandler = true): self
     {
-        $isActiveWrapper=config('handler-settings.wrapper' ,true);
+        return new self(
+            config('handler-settings.transaction', $hasTransaction),
+            config('handler-settings.service_result', $wrapServiceResult),
+            config('handler-settings.wrapper', $withHandler),
+        );
+    }
 
-        if ($withHandler && $isActiveWrapper) {
-            return $this->executeWithHandler($closure, $errorHandler, $hasTransaction ,$successStatus);
-        }
+    public function do(Closure $closure): self
+    {
+        $this->onSuccess = $closure;
+        return $this;
+    }
 
-        return $this->onlyExecute($closure);
+    public function ifFailed(Closure $closure): self
+    {
+        $this->onFailure = $closure;
+        return $this;
     }
 
     /**
-     * @param Closure $closure
-     * @return ServiceResult
+     * @return mixed
+     * @throws \Throwable
      */
-    private function onlyExecute(Closure $closure): ServiceResult
+    public function run(): mixed
     {
-        return new ServiceResult(true, $closure() );
-    }
+        if (!$this->onSuccess) throw new \LogicException("The 'do' closure must be set before calling run.");
 
-    /**
-     * @param Closure $closure
-     * @param Closure|null $errorHandler
-     * @param bool $hasTransaction
-     * @param int $successStatus
-     * @return ServiceResult
-     */
-    private function executeWithHandler(Closure $closure, ?Closure $errorHandler, bool $hasTransaction ,int $successStatus): ServiceResult
-    {
-        if ($hasTransaction) {
-            return $this->executeWithTransaction($closure, $errorHandler ,$successStatus);
-        }
-        return $this->executeWithoutTransaction($closure, $errorHandler ,$successStatus);
-    }
+        if (!$this->useHandler) return $this->executeAction($this->onSuccess);
 
-    /**
-     * @param Closure $closure
-     * @param Closure|null $errorHandler
-     * @param int $successStatus
-     * @return ServiceResult
-     */
-    private function executeWithTransaction(Closure $closure, ?Closure $errorHandler , int $successStatus): ServiceResult
-    {
-
-        DB::beginTransaction();
         try {
-            $result = new ServiceResult(true, $closure() ,$successStatus);
-            DB::commit();
-            return $result;
-        } catch (Exception $exception) {
-            DB::rollBack();
-            return $this->handleError($errorHandler , $exception , 500);
+            $result = $this->useTransaction
+                ? DB::transaction(fn() => $this->executeAction($this->onSuccess))
+                : $this->executeAction($this->onSuccess);
+
+            return $this->wrapResult($result, true);
+        } catch (\Throwable $e) {
+            Log::error($e);
+
+            if ($this->onFailure) {
+                $result = $this->executeAction($this->onFailure);
+                return $this->wrapResult($result, false);
+            }
+
+            throw $e;
         }
     }
 
-    /**
-     * @param Closure $closure
-     * @param Closure|null $errorHandler
-     * @param int $successStatus
-     * @return ServiceResult
-     */
-    private function executeWithoutTransaction(Closure $closure, ?Closure $errorHandler ,int $successStatus): ServiceResult
+    private function executeAction(Closure $closure): mixed
     {
-        try {
-            return new ServiceResult(true, $closure() ,$successStatus);
-        } catch (Exception $exception) {
-            return $this->handleError($errorHandler , $exception);
-        }
+        return $closure();
     }
 
-    /**
-     * @param Closure|null $errorHandler
-     * @param Exception $exception
-     * @return ServiceResult
-     */
-    private function handleError(?Closure $errorHandler , Exception $exception): ServiceResult
+    private function wrapResult(mixed $result, bool $success): mixed
     {
-        if ($errorHandler) $errorHandler();
-        Log::error($exception);
-        return new ServiceResult(false, null , 500);
+        if (!$this->wrapServiceResult) return $result;
+
+        if (!class_exists(ServiceResult::class)) return $result;
+
+        return new ServiceResult($success, $result);
     }
 }
+
