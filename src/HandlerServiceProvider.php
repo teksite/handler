@@ -21,7 +21,7 @@ class HandlerServiceProvider extends ServiceProvider
 
     private function registerConfigFiles(): void
     {
-        $configPath = config_path('handler-settings.php'); // Path to the published file
+        $configPath = config_path('handler-settings.php');
 
         $this->mergeConfigFrom(
             file_exists($configPath) ? $configPath : __DIR__ . '/config/handler-settings.php', 'handler-settings');

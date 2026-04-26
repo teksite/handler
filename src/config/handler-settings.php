@@ -11,11 +11,11 @@ return [
     |  "limit-pagination" is for this reason to not load items more than 250, if it is false
     |   there is no limitation.
     */
-    "pagination" => 50, //number of items per page
+    "pagination" => env('PAGINATE_PER_PAGE' , 50), //number of items per page
 
-    "client-pagination" => 25, //number of items per page in client side
+    "client-pagination" => env('PAGINATE_CLIENT_PER_PAGE',25), //number of items per page in client side
 
-    'limit-pagination' => true, // to prevent data usage max number of items is 250
+    'limit-pagination' => env('PAGINATE_LIMITATION',250), // to prevent data usage max number of items is 250
 
     /*
     |--------------------------------------------------------------------------
@@ -27,5 +27,5 @@ return [
     | entire of the app
     |
     */
-    "wrapper" => true // activating wrapper (try-catch) globally.
+    "wrapper" => env('HANDLER_WRAPPER',true) // activating wrapper (error handling / try-catch) globally.
 ];
