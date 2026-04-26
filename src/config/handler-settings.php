@@ -22,12 +22,16 @@ return [
     | wrapper
     |--------------------------------------------------------------------------
     |
-    | "wrapper" active the ServiceWrapper
-    | CAUTION deactivating this parameter, cause deactivating all ServiceWrappers in the
-    | entire of the app
+    | wrapper => active wrapper (error handling / try-catch) globally
+    | CAUTION deactivating this parameter, cause deactivating all ServiceWrappers in the entire of the app
+    | transaction => active transaction in multi query in database (error handling / try-catch and db transaction) globally.
+    | service_result => unify result of all process with single globally.
+    |
+    |
     |
     */
-    "wrapper"          => env('HANDLER_WRAPPER', true),// activating wrapper (error handling / try-catch) globally.
-    "transaction"      => env('HANDLER_TRANSACTION', true), // activating wrapper (error handling / try-catch) globally.
-    "service_result"      => env('HANDLER_USE_RESULT_SERVICE', true), // activating wrapper (error handling / try-catch) globally.
+    "wrapper"          => env('HANDLER_WRAPPER', true),
+    "transaction"      => env('HANDLER_TRANSACTION', true),
+    "service_result"      => env('HANDLER_USE_RESULT_SERVICE', true),
+    "service_result_class"      => \Teksite\Handler\Actions\ServiceResult::class,
 ];

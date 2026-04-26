@@ -1,6 +1,10 @@
 <?php
+
 namespace Teksite\Handler\Actions;
-class ServiceResult
+
+use Teksite\Handler\contracts\ServiceResult as contract;
+
+class ServiceResult implements contract
 {
     /**
      * @param bool $success

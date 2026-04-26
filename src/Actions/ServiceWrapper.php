@@ -4,7 +4,6 @@ namespace Teksite\Handler\Actions;
 
 
 use Closure;
-use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -86,9 +85,11 @@ class ServiceWrapper
     {
         if (!$this->wrapServiceResult) return $result;
 
-        if (!class_exists(ServiceResult::class)) return $result;
+        $serviceResultClass = config('handler-settings.service_result_class', \Teksite\Handler\Actions\ServiceResult::class);
 
-        return new ServiceResult($success, $result);
+        if (!class_exists($serviceResultClass)) return $result;
+
+        return new $serviceResultClass($success, $result);
     }
 }
 
