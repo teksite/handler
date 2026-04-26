@@ -1,6 +1,6 @@
 {
     "name": "teksite/handler",
-    "description": "Some features to handle Laravel codes better",
+    "description": "Some features to work with error handling in Laravel codes",
     "authors": [
         {
             "name": "Sina Zangiband",
@@ -15,12 +15,13 @@
         }
     },
     "require": {
-        "php": "^8.2"
+        "php": "^8.3",
+        "laravel/framework": "^13"
     },
     "extra": {
         "laravel": {
             "providers": [
-              "Teksite\\Handler\\HandlerServiceProvider"
+                "Teksite\\Handler\\HandlerServiceProvider"
             ]
         }
     }

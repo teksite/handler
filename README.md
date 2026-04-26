@@ -1,9 +1,12 @@
-
 # Handler Package
 
 ## About
-A lightweight Laravel package designed to simplify common PHP and Laravel operations, including try-catch handling, database querying, and other utility functions.
+
+A lightweight Laravel package designed to simplify common PHP and Laravel operations, including try-catch handling,
+database querying, and other utility functions.
+
 ## Table of Contents
+
 - [About](#about)
 - [Author](#author)
 - [Contact](#contact)
@@ -11,16 +14,22 @@ A lightweight Laravel package designed to simplify common PHP and Laravel operat
 - [Features](#features)
 - [Usage](#usage)
 - [Support](#support)
-- 
-## About
-The **Handler Package** streamlines development by providing helper functions for managing try-catch blocks, fetching data from databases, and other common tasks in PHP and Laravel applications. It aims to reduce boilerplate code and improve code readability.
 
+## About
+
+The **Handler Package** streamlines development by providing helper functions for managing try-catch blocks, fetching
+data from databases, and other common tasks in PHP and Laravel applications. It aims to reduce boilerplate code and
+improve code readability.
 
 ## Author
+
 Developed by **Sina Zangiband**.
 
 ## Contact
-- Website: [teksite.net](https://teksite.net)
+
+- Website:
+    - [teksite.net](https://teksite.net)
+    - [laratek.net](https://laratek.net)
 - Email: support@teksite.net
 
 ---
@@ -28,6 +37,7 @@ Developed by **Sina Zangiband**.
 ## Installation
 
 ### Step 1: Install via Composer
+
 Run the following command in your terminal:
 
 ```bash
@@ -36,7 +46,8 @@ composer require teksite/handler
 
 ### Step 2: Register the Service Provider
 
-#### For Laravel 10 and 11
+#### For Laravel > 9
+
 Add the service provider to the `bootstrap/providers.php` file:
 
 ```php
@@ -54,12 +65,17 @@ Add the service provider to the `bootstrap/providers.php` file:
     Teksite\Handler\ServiceProvider::class,
 ];
 ```
+
 ## Features
+
 - Simplify exception handling.
+
 ```php
 \Teksite\Handler\Actions\ServiceWrapper
 ```
+
 example
+
 ```php
  return app(ServiceWrapper::class)(function () use ($inputs, $post) {
        $post->update(Arr::except($inputs, ['tag', 'meta', 'seo']));
@@ -68,10 +84,13 @@ example
 ```
 
 - Streamlined methods for querying and fetching data.
+
 ```php
 \Teksite\Handler\Services\FetchDataService
 ```
+
 example
+
 ```php
   public function get(mixed $fetchData = [])
   {
@@ -82,6 +101,7 @@ example
 ```
 
 ### Configuration
+
 The package includes a configuration file for customization. Publish it using:
 
 ```bash
@@ -91,6 +111,7 @@ php artisan vendor:publish --provider="Teksite\Handler\ServiceProvider"
 Edit the configuration in `config/handler-settings.php` to adjust settings like default query limits or error logging.
 
 ## Support
+
 For questions, issues, or feature requests, please reach out via:
 
 - **Website**: [teksite.net](https://teksite.net)
