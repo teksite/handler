@@ -4,6 +4,7 @@ namespace Teksite\Handler\Actions;
 
 
 use Closure;
+use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -11,6 +12,8 @@ class ServiceWrapper
 {
     private Closure|null $onSuccess = null;
     private Closure|null $onFailure = null;
+
+    private array $eventData = [];
 
     /**
      * @param bool $useTransaction
@@ -48,13 +51,22 @@ class ServiceWrapper
         return $this;
     }
 
+
+    public function withEventData(array $data): self
+    {
+        $this->eventData = $data;
+        return $this;
+    }
+
     /**
      * @param bool $dispatchSuccessEvent
      * @param bool $dispatchFailureEvent
+     * @param array $eventData
      * @return mixed
+     * @throws BindingResolutionException
      * @throws \Throwable
      */
-    public function run(bool $dispatchSuccessEvent  =false , bool $dispatchFailureEvent  =true): mixed
+    public function run(bool $dispatchSuccessEvent = false, bool $dispatchFailureEvent = false ,array $additionalEventData = []): mixed
     {
         if (!$this->onSuccess) {
             throw new \LogicException("The 'do' closure must be set before calling run.");
@@ -66,6 +78,8 @@ class ServiceWrapper
 
         $failureEventClass = config('handler-settings.failure_event_class');
         $successEventClass = config('handler-settings.success_event_class');
+        $eventData = array_merge($this->eventData, $additionalEventData);
+
 
         try {
             $result = $this->useTransaction
@@ -73,7 +87,8 @@ class ServiceWrapper
                 : $this->executeAction($this->onSuccess);
 
             if ($dispatchSuccessEvent && $successEventClass && class_exists($successEventClass)) {
-                app()->make($successEventClass);
+                $event = app()->make($successEventClass, array_merge($eventData, ['result' => $result]));
+                event($event);
             }
 
             return $this->wrapResult($result, true);
@@ -81,7 +96,8 @@ class ServiceWrapper
             Log::error($e->getMessage(), ['trace' => $e->getTraceAsString()]);
 
             if ($dispatchFailureEvent && $failureEventClass && class_exists($failureEventClass)) {
-                app()->make($failureEventClass, ['exception' => $e]);
+                $event = app()->make($failureEventClass, array_merge($eventData, ['exception' => $e]));
+                event($event);
             }
 
 

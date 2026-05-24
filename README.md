@@ -12,24 +12,27 @@ database querying, and other utility functions.
 - [Contact](#contact)
 - [Installation](#installation)
 - [Features](#features)
+- [Event System](#event-system)
+- [Configuration](#configuration)
 - [Support](#support)
 
 ## About
 
-The **Handler Package** streamlines development by providing helper functions for managing try-catch blocks, fetching
+The Handler Package streamlines development by providing helper functions for managing try-catch blocks, fetching
 data from databases, and other common tasks in PHP and Laravel applications. It aims to reduce boilerplate code and
 improve code readability.
 
 ## Author
 
-Developed by **Sina Zangiband**.
+Developed by Sina Zangiband.
 
 ## Contact
 
 - Website:
-    - [teksite.net](https://teksite.net)
-    - [laratek.net](https://laratek.net)
-- Email: support@teksite.net
+    - teksite.net
+    - laratek.net
+    - laratek.ir
+- Email: sina.zangiband@gmail.com
 
 ---
 
@@ -39,129 +42,259 @@ Developed by **Sina Zangiband**.
 
 Run the following command in your terminal:
 
-```bash
+bash
 composer require teksite/handler
-```
+
 
 ### Step 2: Register the Service Provider
 
 #### For Laravel > 9
 
-Add the service provider to the `bootstrap/providers.php` file:
+Add the service provider to the bootstrap/providers.php file:
 
 ```php
 'providers' => [
-    // Other Service Providers
-    Teksite\Handler\ServiceProvider::class,
+// Other Service Providers
+Teksite\Handler\ServiceProvider::class,
 ],
 ```
 
-> **Note**: Laravel 5.5 and above supports auto-discovery, so this step is not required for newer versions.
-
-```php
-'providers' => [
-    // Other Service Providers
-    Teksite\Handler\ServiceProvider::class,
-];
-```
+Note: Laravel 5.5 and above supports auto-discovery, so this step is not required for newer versions.
 
 ## Features
 
-### Simplify exception handling.
+### Simplify exception handling with ServiceWrapper
+
+`Teksite\Handler\Actions\ServiceWrapper`
+
+#### Basic Usage
 
 ```php
-\Teksite\Handler\Actions\ServiceWrapper
+return ServiceWrapper::make()->do(function () {
+// your code
+})->ifFailed(function () {
+// in case your code failed
+})->run();
 ```
 
-example:
+- do() is required - contains your main code to be processed in try-catch
+- ifFailed() is optional - runs if your code fails, errors are automatically logged to laravel.log
+
+#### Advanced Configuration
 
 ```php
+// Disable error handling wrapper
+ServiceWrapper::make(withHandler: false)->do(fn() => $this->someMethod())->run();
 
- return ServiceWrapper::make()->do(function (){
-    // your code
- })->ifFailed(function(){
-    //in case your code failed
- })->run();
+// Disable database transaction (enabled by default)
+ServiceWrapper::make(hasTransaction: false)->do(fn() => $this->someMethod())->run();
 
+// Disable ServiceResult wrapping (enabled by default)
+ServiceWrapper::make(wrapServiceResult: false)->do(fn() => $this->someMethod())->run();
 ```
 
-- in this code :
-    - `do()` is necessary, and it is your main code to be processed in try-catch
-    - `ifFailed` is run if your code fails, the error is log in laravel.log
-    - you can ignore error handling by setting `$withHandler false` : `ServiceWrapper::make(withHandler: false)`
-    - by default db transaction is active to set it off : `ServiceWrapper::make(hasTransaction: false)`
-    - also by default the output of the `do` and is `ifFailed` is instance of `ServiceResult` to have integrated result.
-      set it off by `ServiceWrapper::make(wrapServiceResult: false)`
-    - all these configs can be set globally in `handler-settings.transaction` config file
+#### Event Dispatching
 
-### Streamlined methods for querying and fetching data.
+The `run()` method accepts two optional parameters to dispatch custom events:
 
 ```php
-\Teksite\Handler\Services\FetchDataService
+public function run(bool $dispatchSuccessEvent = false, bool $dispatchFailureEvent = true): mixed
 ```
 
-example of ServiceWrapper and FetchDataService
+Example:
+```php
+return ServiceWrapper::make()
+->do(function () {
+// Your business logic
+return User::create($request->validated());
+})
+->ifFailed(function () {
+// Fallback logic
+return ['error' => 'User creation failed'];
+})
+->run(
+dispatchSuccessEvent: true,  // Dispatches success event on completion
+dispatchFailureEvent: false  // Disables failure event dispatch
+);
+
+```
+## Event Classes Configuration:
+
+Define your event classes in config/handler-settings.php:
 
 ```php
- //
- public function get(mixed $fetchData = []){
-    ServiceWrapper::make()->do(function () use ($fetchData){
-        FetchDataService::get(Post::class, ['title'], ...$fetchData);
-    })->ifFailed(function(){
-    //in case your code failed
-    })->run();
- });
+return [
+// ... other configurations
+
+    'success_event_class' => "Teksite\\Handler\\Events\\OnSuccessEvent",
+    'failure_event_class' => "Teksite\\Handler\\Events\\OnFailureEvent",
+];
+```
+
+Note: Events are resolved using Laravel's service container, so dependency injection is fully supported in your event constructors.
+
+#### ServiceResult Wrapper
+
+By default, the output of both do() and ifFailed() is wrapped in a ServiceResult instance for consistent return values:
+
+```php
+$result = ServiceWrapper::make()->do(fn() => Post::find(1))->run();
+
+if ($result->isSuccess()) {
+$post = $result->getData();
+} else {
+$error = $result->getData(); // Error information
 }
 
+```
+Disable wrapping:
 
+```php
+$rawResult = ServiceWrapper::make(wrapServiceResult: false)->do(fn() => Post::find(1))->run();
 ```
 
-- in this code:
+### Streamlined Database Query Methods
 
-    - you can only use `FetchDataService::get(Post::class, ['title'], ...$fetchData)` without ServiceWrapper class.
-    - the arguments of this method are:
-        - `string|Closure|Builder|Relation $model`: to get query from class or relation or model,`
-        - `string|array|Closure|null $searchColumns`: search in column, to implement operators you can
-          `$searchColumns = [['column'=>'title' , 'operator'=>'LIKE' ] , ['category'=>'=']`,
-        - `array  $only = ['*']` : select desired columns,
-        - `null|int|false $perPage = null` : number of records per page (can be changed in handler-settings.pagination
-          config file),
-        - `null|false|int  $limitPagination = null` : it is used to limit client to get large amount records per page (
-          can be change in handler-settings.limit-pagination config file)
+```Teksite\Handler\Services\FetchDataService```
 
-### Response by json or http
+#### Example with ServiceWrapper
 
-```
-    // sucess message
-    $response =ResponderServices::success('weldone' ,['post=>$post] , 201);
-    
-    // failed message
-    $response =ResponderServices::failed('something went wrong' , ['auth'=> 'forbidden' , ...] ,500);
-
-    // to redirct client as http response 
-    $response->go();
-    
-    // to respone as json in api and ajax senario
-    $response->reoly()
-
+```php
+public function get(mixed $fetchData = [])
+{
+return ServiceWrapper::make()
+->do(function () use ($fetchData) {
+return FetchDataService::get(Post::class, ['title'], ...$fetchData);
+})
+->ifFailed(function () {
+// Handle failure
+})
+->run(dispatchSuccessEvent: true);
+}
 ```
 
-### Configuration
+#### Standalone Usage
 
-The package includes a configuration file for customization. Publish it using:
+```php
+// Without ServiceWrapper
+$posts = FetchDataService::get(Post::class, ['title']);
+```
+
+#### Method Parameters
+
+```php
+FetchDataService::get(
+string|Closure|Builder|Relation $model,  // Model class, query builder, or relation
+string|array|Closure|null $searchColumns, // Search columns with operators
+array $only = ['*'],                       // Columns to select
+null|int|false $perPage = null,            // Items per page (pagination)
+null|false|int $limitPagination = null     // Maximum items per page limit
+);
+
+```
+Search with Operators:
+
+```php
+$searchColumns = [
+['column' => 'title', 'operator' => 'LIKE'],
+['column' => 'category', 'operator' => '='],
+'status' // Simple column search (default '=')
+];
+```
+
+### HTTP Response Helper
+
+```php
+use Teksite\Handler\Services\ResponderServices;
+
+// Success response
+$response = ResponderServices::success('Well done!', ['post' => $post], 201);
+
+// Failure response
+$response = ResponderServices::failed('Something went wrong', ['auth' => 'forbidden'], 500);
+
+// Redirect as HTTP response
+$response->go();
+
+// Return as JSON response (for APIs and AJAX)
+$response->reply();
+
+```
+## Event System
+
+### How It Works
+
+The ServiceWrapper automatically dispatches events when configured:
+
+1. Success Events - Triggered when the do() closure executes without errors
+2. Failure Events - Triggered when an exception is caught
+
+### Custom Event Example
+
+Create your event class:
+
+```php
+namespace App\Events;
+
+use Illuminate\Foundation\Events\Dispatchable;
+
+class UserCreationSucceeded
+{
+use Dispatchable;
+
+    public function __construct(public $user)
+    {
+        //
+    }
+}
+
+```
+Configure in config/handler-settings.php:
+
+```php
+'success_event_class' => \App\Events\UserCreationSucceeded::class,
+```
+
+Use in your codes:
+
+```php
+ServiceWrapper::make()
+->do(fn() => User::create($data))
+->run(dispatchSuccessEvent: true);
+```
+
+### Advanced Event Dispatching
+
+Control event dispatch per method call:
+
+```php
+// Dispatch only success event
+$wrapper->run(dispatchSuccessEvent: true, dispatchFailureEvent: false);
+
+// Dispatch only failure event (default behavior)
+$wrapper->run(dispatchSuccessEvent: false, dispatchFailureEvent: true);
+
+// Dispatch both
+$wrapper->run(dispatchSuccessEvent: true, dispatchFailureEvent: true);
+
+// Dispatch none
+$wrapper->run(dispatchSuccessEvent: false, dispatchFailureEvent: false);
+
+```
+## Configuration
+
+### Publish Configuration File
 
 ```bash
 php artisan vendor:publish --provider="Teksite\Handler\ServiceProvider"
 ```
 
-Edit the configuration in `config/handler-settings.php` to adjust settings like default query limits or error logging.
-
 ## Support
 
 For questions, issues, or feature requests, please reach out via:
 
-- **Website**: [teksite.net](https://teksite.net)
-- **Email**: support@teksite.net
-- **GitHub Issues**: [teksite/handler](https://github.com/teações/extralaravel)
+- Website: teksite.net | laratek.net
+- Email: support@teksite.net
+- GitHub Issues: teksite/handler
 
 Contributions are welcome! Feel free to submit a pull request or open an issue on GitHub.
