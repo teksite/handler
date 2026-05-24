@@ -2,7 +2,7 @@
 return [
     /*
     |--------------------------------------------------------------------------
-    | FetchDara
+    | FetchData
     |--------------------------------------------------------------------------
     |
     | "pagination" This value is the number of items per page.
@@ -35,4 +35,13 @@ return [
     "transaction"          => env('HANDLER_TRANSACTION', true),
     "service_result"       => env('HANDLER_USE_RESULT_SERVICE', true),
     "service_result_class" => \Teksite\Handler\Actions\ServiceResult::class,
+
+    /**
+     *
+     * run the event if the operation succeeded or failed
+     *
+     */
+
+    "success_event_class"     => "Teksite\\Handler\\Events\\OnSuccessEvent",
+    "failure_event_class"     => "Teksite\\Handler\\Events\\OnFailureEvent",
 ];
