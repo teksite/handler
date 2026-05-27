@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
@@ -16,30 +17,47 @@ class FetchDataService
 {
 
     /**
+     * Allowed SQL operators for searching.
+     */
+    private const array ALLOWED_OPERATORS = [
+        '=',
+        'LIKE',
+        'ILIKE',
+        '!=',
+        '<>',
+    ];
+
+    /**
      * Main entry point for fetching data.
+     *
+     * @throws \Exception
      */
     public static function get(
         string|Closure|Builder|Relation $model,
-        string|array|null               $searchColumns = ['title'],
+        string|array|null               $searchColumns = null,
         array                           $only = ['*'],
         null|int|false                  $perPage = null,
         null|false|int                  $limitPagination = null
     ): mixed
     {
-        if ($model instanceof Closure) return self::executeClosure($model);
+
+        if ($model instanceof Closure) {
+            return self::executeClosure($model);
+        }
+
 
         $perPageFromReq = request()->has('per_page') ? max(1, request()->integer('per_page')) : null;
         $configPerPage = config('handler-settings.pagination', 25);
 
         $perPage = $perPageFromReq ?? $perPage ?? $configPerPage ?? 25;
 
-        $limitPagination = is_null($limitPagination)
-            ? config('handler-settings.limit-pagination', 250)
-            : $limitPagination;
+        $limitPagination = is_null($limitPagination) ? config('handler-settings.limit-pagination', 250) : $limitPagination;
 
         $query = self::getQueryBuilder($model);
 
-        if ($searchColumns) $query = self::applySearch($query, (array)$searchColumns);
+        if ($searchColumns) {
+            $query = self::applySearch($query, (array)$searchColumns);
+        }
 
         $query = self::applyingSelection($query, $only);
 
@@ -59,43 +77,35 @@ class FetchDataService
 
 
     /**
-     * Converts various model types into an Eloquent Query Builder instance.
-     *
-     * Handles Eloquent models, relations, and query builders directly.
-     *
-     * @param string|Model|Builder|Relation $model The Eloquent model, relation, or builder.
-     *
-     * @return Builder Returns an Eloquent Query Builder instance.
-     *
-     * @throws InvalidArgumentException If the provided model type is not supported.
+     * Convert model/relation/builder into Builder.
      */
     private static function getQueryBuilder(string|Model|Builder|Relation $model): Builder
     {
-
         return match (true) {
+
             $model instanceof Builder  => $model,
             $model instanceof Relation => $model->getQuery(),
             $model instanceof Model    => $model->newQuery(),
             is_string($model)          => (new $model())->newQuery(),
-            default                    => throw new InvalidArgumentException('Invalid model, builder, or relation provided.')
+            default                    => throw new InvalidArgumentException('Invalid model, builder, or relation provided.'),
         };
-
     }
 
     /**
-     * @param Builder $query
-     * @param string|array $only
-     * @return Builder
+     * Apply select columns.
      */
     private static function applyingSelection(Builder $query, string|array $only = ['*']): Builder
     {
+
         $only = is_array($only) ? $only : [$only];
-        if ($only !== ['*']) {
+
+        if (!in_array('*', $only)) {
+
             $model = $query->getModel();
 
             $primaryKey = $model->getKeyName();
 
-            if (!in_array($primaryKey, $only)) {
+            if (!in_array($primaryKey, $only, true)) {
                 $only[] = $primaryKey;
             }
 
@@ -107,61 +117,63 @@ class FetchDataService
 
 
     /**
-     * Applies search filters to the query builder based on request parameters.
-     *
-     * Searches across specified columns using a LIKE clause.
-     *
-     * @param Builder $query The Eloquent query builder instance.
-     * @param array $searchColumns An array of column names or column definitions to search within.
-     *
-     * @return Builder The query builder with search conditions applied.
+     * Apply search conditions safely.
      */
     private static function applySearch(Builder $query, array $searchColumns): Builder
     {
+
         $searchInputField = config('handler-settings.search_input_field', 's');
 
-        $keyword = request()->input($searchInputField);
+        $keyword = trim((string)request()->input($searchInputField));
 
-        if (!$keyword) return $query;
+        if ($keyword === '') {
+            return $query;
+        }
 
         $model = $query->getModel();
+
         $table = $model->getTable();
 
-        $validColumns = Schema::getColumnListing($table);
+        /**
+         * Cache table columns for performance.
+         */
+        $validColumns = Cache::remember(
+            "fetch-data-columns:{$table}",
+            now()->addHours(24),
+            fn() => Schema::getColumnListing($table)
+        );
 
         $query->where(function (Builder $q) use ($searchColumns, $keyword, $validColumns) {
 
-            $first = true;
+            $hasValidCondition = false;
 
             foreach ($searchColumns as $columnDefinition) {
 
+                $column = null;
+
+                $operator = 'LIKE';
+
+                $value = "%{$keyword}%";
+
+                /**
+                 * Array definition.
+                 */
                 if (is_array($columnDefinition)) {
-
-                    $column = $columnDefinition['column']
-                        ?? $columnDefinition[0]
-                        ?? null;
-
-                    $operator = strtoupper(
-                        $columnDefinition['operation']
-                        ?? $columnDefinition[1]
-                        ?? 'LIKE'
-                    );
-
-                    $value = $operator === 'LIKE'
-                        ? "%{$keyword}%"
-                        : ($columnDefinition['value'] ?? $keyword);
-
+                    $column = $columnDefinition['column'] ?? $columnDefinition[0] ?? null;
+                    $operator = strtoupper($columnDefinition['operation'] ?? $columnDefinition[1] ?? 'LIKE');
+                    /**
+                     * Validate operator.
+                     */
+                    if (!in_array($operator, self::ALLOWED_OPERATORS, true)) {
+                        $operator = 'LIKE';
+                    }
+                    $value = $operator === 'LIKE' || $operator === 'ILIKE' ? "%{$keyword}%" : ($columnDefinition['value'] ?? $keyword);
                 } else {
-
                     $column = $columnDefinition;
-
-                    $operator = 'LIKE';
-
-                    $value = "%{$keyword}%";
                 }
 
                 /**
-                 * Security validation
+                 * Security validation.
                  */
                 if (
                     !is_string($column)
@@ -171,49 +183,58 @@ class FetchDataService
                     continue;
                 }
 
-                if ($first) {
+                if (!$hasValidCondition) {
                     $q->where($column, $operator, $value);
-                    $first = false;
+                    $hasValidCondition = true;
                 } else {
                     $q->orWhere($column, $operator, $value);
                 }
+            }
+
+            /**
+             * Prevent returning all rows
+             * if no valid searchable column exists.
+             */
+            if (!$hasValidCondition) {
+                $q->whereRaw('1 = 0');
             }
         });
 
         return $query;
     }
 
-
     /**
      * Applies ordering to the query builder based on request parameters.
-     *
-     * Defaults to ordering by 'created_at' descending. Allows specifying 'order' and 'sort' parameters.
-     * Validates that the order column exists in the table.
-     *
-     * @param Builder $query The Eloquent query builder instance.
-     *
-     * @return Builder The query builder with ordering conditions applied.
-     * @throws \Exception
      */
     private static function applyOrdering(Builder $query): Builder
     {
         $orderBy = request()->input('order', 'created_at');
-        $sort = strtolower(request()->input('sort', 'desc'));
 
-        if ($orderBy === 'created_at') {
-            $sort = $sort === 'asc' ? 'asc' : 'desc'; // default desc
-        } else {
-            $sort = $sort === 'desc' ? 'desc' : 'asc'; // default asc
-        }
+        $sort = strtolower( request()->input('sort', 'desc'));
 
-        // Check if the column exists in the table before applying orderBy to prevent SQL errors
+        $sort = in_array($sort, ['asc', 'desc'], true) ? $sort : 'desc';
+
         $model = $query->getModel();
-        if (Schema::hasColumn($model->getTable(), $orderBy)) {
-            $query->orderBy($orderBy, $sort);
-        } else {
-            Log::warning("Attempted to order by non-existent column: {$orderBy} on table {$model->getTable()}");
-            throw new \Exception('Attempted to order by non-existent column: ' . $orderBy);
+
+        $table = $model->getTable();
+
+        /**
+         * Cache table columns.
+         */
+        $validColumns = Cache::remember(
+            "fetch-data-columns:{$table}",
+            now()->addHours(12),
+            fn () => Schema::getColumnListing($table)
+        );
+
+        /**
+         * Validate orderBy column.
+         */
+        if (!in_array($orderBy, $validColumns, true)) {
+            $orderBy = $model->getKeyName();
         }
+
+        $query->orderBy($orderBy, $sort);
 
         return $query;
     }
@@ -221,25 +242,22 @@ class FetchDataService
 
     /**
      * Applies pagination to the query builder.
-     *
-     * Determines the number of items per page based on the $pagination parameter,
-     * request parameter, or class defaults. Optionally limits pagination to a maximum.
-     *
-     * @param Builder $query The Eloquent query builder instance.
-     * @param int|false $perPage
-     * @param int|false $limitPagination
-     * @return LengthAwarePaginator|Collection Returns a paginator instance or a collection of results.
      */
-    private static function applyPagination(Builder $query, int|false $perPage, int|false $limitPagination): LengthAwarePaginator|Collection
-    {
+    private static function applyPagination(Builder $query, int|false $perPage, int|false $limitPagination): LengthAwarePaginator|Collection {
 
+        /**
+         * No pagination.
+         */
         if ($perPage === false) {
             return $limitPagination === false ? $query->get() : $query->limit($limitPagination)->get();
         }
 
+        /**
+         * Prevent abuse.
+         */
         $limit = $limitPagination ? min($perPage, $limitPagination) : $perPage;
 
-        return $limit ? $query->paginate($limit)->withQueryString() : $query->get();
+        return $query ->paginate($limit)->withQueryString();
     }
 
 
