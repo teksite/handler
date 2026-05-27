@@ -18,104 +18,62 @@ use RuntimeException;
 class FetchDataService
 {
     /**
-     * Allowed SQL operators for searching.
+     * Allowed SQL operators.
      */
     private const array ALLOWED_OPERATORS = ['=', 'LIKE', 'ILIKE', '!=', '<>', '>', '<', '<=', '>='];
 
     /**
-     * Cache lifetime for table columns (seconds).
+     * Cache lifetime for table columns.
      */
-    private const int COLUMN_CACHE_TTL = 86400; // 24 hours
+    private const int COLUMN_CACHE_TTL = 86400;
 
     /**
-     * Main entry point for fetching data.
-     *
-     * @param string|Closure|Builder|Relation $model
-     * @param array|string|null $searchColumns
-     * @param array $only
-     * @param int|false|null $perPage
-     * @param int|false|null $limitPagination
-     * @param array $with
-     * @param array $withCount
-     * @return mixed
-     * @throws \Exception
+     * Main fetch method.
      */
     public static function get(
-        string|Closure|Builder|Relation $model,
-        string|array|null               $searchColumns = null,
-        array|string                    $only = ['*'],
-        null|int|false                  $perPage = null,
-        null|false|int                  $limitPagination = null,
-        array                           $with = [],
-        array                           $withCount = []
+        string|Model|Closure|Builder|Relation $model,
+        string|array|null                     $searchColumns = null,
+        array|string                          $only = ['*'],
+        null|int|false                        $perPage = null,
+        null|false|int                        $limitPagination = null,
+        array                                 $with = [],
+        array                                 $withCount = []
     ): mixed
     {
-        // Handle closure
         if ($model instanceof Closure) {
-            return self::executeClosure($model);
+            return $model();
         }
 
-        // Build query
         $query = self::getQueryBuilder($model);
 
-        // Apply eager loading
+        // eager load
         if (!empty($with)) {
             $query->with($with);
         }
 
-        // Apply withCount
+        // with count
         if (!empty($withCount)) {
             $query->withCount($withCount);
         }
 
-        // Apply selection
-        $query = self::applySelection($query, (array)$only);
+        // select
+        $query = self::applySelection($query, (array)$only, $with);
 
-        // Apply search (supports relations)
+        // search
         if ($searchColumns) {
             $query = self::applySearch($query, (array)$searchColumns);
         }
 
-        // Apply ordering
+        // ordering
         $query = self::applyOrdering($query);
 
-        // Apply pagination or limit
-        return self::applyPagination(
-            $query,
-            self::resolvePerPage($perPage),
-            self::resolveLimitPagination($limitPagination)
+        // pagination
+        return self::applyPagination($query, self::resolvePerPage($perPage), self::resolveLimitPagination($limitPagination)
         );
     }
 
     /**
-     * Execute closure and return result.
-     */
-    private static function executeClosure(Closure $closure): mixed
-    {
-        return $closure();
-    }
-
-    /**
-     * Resolve per-page value from request or config.
-     */
-    private static function resolvePerPage(null|int|false $perPage): int|false
-    {
-        $fromRequest = request()->has('per_page') ? max(1, request()->integer('per_page')) : null;
-        $configValue = config('handler-settings.pagination', 25);
-
-        return $fromRequest ?? ($perPage ?? $configValue);
-    }
-
-    /**
-     * Resolve limit pagination value.
-     */
-    private static function resolveLimitPagination(null|false|int $limitPagination): int|false
-    {
-        return $limitPagination ?? config('handler-settings.limit-pagination', 250);
-    }
-
-    /**
-     * Convert model/relation/builder into Builder.
+     * Convert model/builder/relation into Builder.
      */
     private static function getQueryBuilder(string|Model|Builder|Relation $model): Builder
     {
@@ -124,33 +82,92 @@ class FetchDataService
             $model instanceof Relation => $model->getQuery(),
             $model instanceof Model    => $model->newQuery(),
             is_string($model)          => (new $model())->newQuery(),
-            default                    => throw new InvalidArgumentException('Invalid model, builder, or relation provided.'),
+            default                    => throw new InvalidArgumentException('Invalid model, builder, or relation.'),
         };
     }
 
     /**
-     * Apply select columns (always include primary key if not '*')
+     * Resolve per page.
      */
-    private static function applySelection(Builder $query, array $only): Builder
+    private static function resolvePerPage(null|int|false $perPage): int|false
     {
-        if (in_array('*', $only)) {
+        $requestPerPage = request()->integer('per_page');
+
+        if ($requestPerPage > 0) {
+            return $requestPerPage;
+        }
+
+        return $perPage ?? config('handler-settings.pagination', 25);
+    }
+
+    /**
+     * Resolve max pagination limit.
+     */
+    private static function resolveLimitPagination(null|false|int $limitPagination): int|false
+    {
+        return $limitPagination ?? config('handler-settings.limit-pagination', 250);
+    }
+
+    /**
+     * Apply select.
+     */
+    private static function applySelection(Builder $query, array $only, array $with = []): Builder
+    {
+        if (in_array('*', $only, true)) {
             return $query;
         }
 
-        $primaryKey = $query->getModel()->getKeyName();
+        $model = $query->getModel();
+
+        // always include primary key
+        $primaryKey = $model->getKeyName();
+
         if (!in_array($primaryKey, $only, true)) {
             $only[] = $primaryKey;
         }
 
-        return $query->select($only);
+        /**
+         * Include foreign keys for eager loading.
+         */
+        foreach ($with as $relationName) {
+            $relationName = explode(':', $relationName)[0];
+
+            if (!method_exists($model, $relationName)) {
+                continue;
+            }
+
+            try {
+                $relation = $model->{$relationName}();
+
+                if (method_exists($relation, 'getForeignKeyName')) {
+                    $foreignKey = $relation->getForeignKeyName();
+
+                    if (!in_array($foreignKey, $only, true)) {
+                        $only[] = $foreignKey;
+                    }
+                }
+
+                if (method_exists($relation, 'getLocalKeyName')) {
+                    $localKey = $relation->getLocalKeyName();
+
+                    if (!in_array($localKey, $only, true)) {
+                        $only[] = $localKey;
+                    }
+                }
+            } catch (\Throwable) {
+            }
+        }
+
+        return $query->select(array_unique($only));
     }
 
     /**
-     * Apply search with relation support (e.g., 'user.name', 'category.title')
+     * Apply search.
      */
     private static function applySearch(Builder $query, array $searchColumns): Builder
     {
         $searchInput = config('handler-settings.search_input_field', 's');
+
         $keyword = trim(request()->input($searchInput, ''));
 
         if ($keyword === '') {
@@ -160,41 +177,43 @@ class FetchDataService
         return $query->where(function (Builder $q) use ($searchColumns, $keyword) {
             $hasCondition = false;
 
-            foreach ($searchColumns as $columnDefinition) {
-                $condition = self::parseSearchCondition($columnDefinition, $keyword);
-
+            foreach ($searchColumns as $definition) {
+                $condition = self::parseSearchCondition($definition, $keyword);
                 if (!$condition) {
                     continue;
                 }
 
-                ['column' => $column, 'operator' => $operator, 'value' => $value] = $condition;
+                ['column' => $column, 'operator' => $operator, 'value' => $value,] = $condition;
 
+                /**
+                 * Relation search
+                 */
                 if (str_contains($column, '.')) {
-                    // Relation search (e.g., user.name)
-                    $q->orWhereHas(
-                        self::extractRelationName($column),
-                        function (Builder $relationQuery) use ($column, $operator, $value, &$hasCondition) {
-                            $field = self::extractColumnName($column);
-                            if ($hasCondition) {
-                                $relationQuery->where($field, $operator, $value);
-                            } else {
-                                $relationQuery->where($field, $operator, $value);
-                            }
-                        }
-                    );
-                    $hasCondition = true;
-                } else {
-                    // Direct column search
+
+                    $relation = self::extractRelationName($column);
+                    $field = self::extractColumnName($column);
+
                     if (!$hasCondition) {
-                        $q->where($column, $operator, $value);
+                        $q->whereHas($relation, fn(Builder $rq) => $rq->where($field, $operator, $value));
                         $hasCondition = true;
                     } else {
-                        $q->orWhere($column, $operator, $value);
+                        $q->orWhereHas($relation, fn(Builder $rq) => $rq->where($field, $operator, $value));
                     }
+                    continue;
+                }
+
+                /**
+                 * Direct column
+                 */
+                if (!$hasCondition) {
+                    $q->where($column, $operator, $value);
+                    $hasCondition = true;
+                } else {
+
+                    $q->orWhere($column, $operator, $value);
                 }
             }
 
-            // Prevent empty search returning all rows
             if (!$hasCondition) {
                 $q->whereRaw('1 = 0');
             }
@@ -202,37 +221,41 @@ class FetchDataService
     }
 
     /**
-     * Parse search condition from definition.
-     *
-     * @param string|array $definition
-     * @param string $keyword
-     * @return array|null
+     * Parse search condition.
      */
     private static function parseSearchCondition(string|array $definition, string $keyword): ?array
     {
         if (is_array($definition)) {
+
             $column = $definition['column'] ?? $definition[0] ?? null;
+
             $operator = strtoupper($definition['operation'] ?? $definition[1] ?? 'LIKE');
+
             $value = $definition['value'] ?? $keyword;
+
         } else {
             $column = $definition;
             $operator = 'LIKE';
-            $value = "%{$keyword}%";
+            $value = $keyword;
         }
 
-        // Validate operator
+        if (!$column || !is_string($column)) {
+            return null;
+        }
+
+        // validate operator
         if (!in_array($operator, self::ALLOWED_OPERATORS, true)) {
             $operator = 'LIKE';
         }
 
-        // Format value for LIKE/ILIKE
-        if (in_array($operator, ['LIKE', 'ILIKE'], true) && !str_contains($value, '%')) {
-            $value = "%{$value}%";
+        // PostgreSQL only
+        if ($operator === 'ILIKE' && DB::getDriverName() !== 'pgsql') {
+            $operator = 'LIKE';
         }
 
-        // Basic column validation (for direct columns, relations validated later)
-        if (!is_string($column) || empty($column)) {
-            return null;
+        // add %
+        if (in_array($operator, ['LIKE', 'ILIKE'], true) && !str_contains($value, '%')) {
+            $value = "%{$value}%";
         }
 
         return [
@@ -243,71 +266,64 @@ class FetchDataService
     }
 
     /**
-     * Extract relation name from dot notation (e.g., 'user.profile.name' -> 'user')
+     * Extract relation path.
+     *
+     * user.profile.name
+     * => user.profile
      */
     private static function extractRelationName(string $path): string
     {
         $parts = explode('.', $path);
-        return $parts[0];
+
+        array_pop($parts);
+
+        return implode('.', $parts);
     }
 
     /**
-     * Extract column name from dot notation (e.g., 'user.profile.name' -> 'name')
+     * Extract field name.
+     *
+     * user.profile.name
+     * => name
      */
     private static function extractColumnName(string $path): string
     {
-        $parts = explode('.', $path);
-        return end($parts);
+        return last(explode('.', $path));
     }
 
     /**
-     * Apply ordering with column validation and smart defaults.
+     * Apply ordering.
      */
     private static function applyOrdering(Builder $query): Builder
     {
         $defaultOrderBy = config('handler-settings.default_order_by', 'created_at');
-        $defaultSort = config('handler-settings.default_sort_direction', 'desc');
 
-        // Get from request, fallback to defaults
+        $defaultSort = strtolower(config('handler-settings.default_sort_direction', 'desc'));
+
         $orderBy = request()->input('order', $defaultOrderBy);
+
         $sort = strtolower(request()->input('sort', $defaultSort));
 
-        // Validate sort direction
         $sort = in_array($sort, ['asc', 'desc'], true) ? $sort : $defaultSort;
 
-        // Check if ordering by relation (contains dot)
+        /**
+         * Prevent relation ordering.
+         */
         if (str_contains($orderBy, '.')) {
-            $allowRelationOrdering = config('handler-settings.allow_relation_ordering', false);
-
-            if (!$allowRelationOrdering) {
-                // Fallback to default if relation ordering not allowed
-                $orderBy = $defaultOrderBy;
-                $sort = $defaultSort;
-            } else {
-                // Optional: Implement relation ordering with join
-                // For now, just apply as is (will work if relation is joined)
-                $query->orderBy($orderBy, $sort);
-                return $query;
-            }
+            throw new RuntimeException(
+                'Relation ordering requires joins.'
+            );
         }
 
-        // Validate column exists in main table
-        $validColumns = self::getTableColumns($query->getModel()->getTable());
+        $columns = self::getTableColumns($query->getModel()->getTable());
 
-        // If column not valid, fallback to primary key or created_at
-        if (!in_array($orderBy, $validColumns, true)) {
-            $orderBy = in_array('created_at', $validColumns) ? 'created_at' : $query->getModel()->getKeyName();
-            $sort = $defaultSort;
-
-            // Log warning for debugging
-            Log::warning("Invalid order column requested", [
-                'requested' => request()->input('order'),
-                'fallback' => $orderBy
-            ]);
+        if (!in_array($orderBy, $columns, true)) {
+            $orderBy = in_array('created_at', $columns, true)
+                ? 'created_at'
+                : $query->getModel()->getKeyName();
         }
 
-        $query->orderBy($orderBy, $sort);
-        return $query;
+        return $query->orderBy($orderBy, $sort);
     }
 
     /**
@@ -315,32 +331,53 @@ class FetchDataService
      */
     private static function getTableColumns(string $table): array
     {
-        $cacheKey = "fetch-data-columns:{$table}";
-        return Cache::remember($cacheKey, self::COLUMN_CACHE_TTL, function () use ($table) {
-            try {
-                return Schema::getColumnListing($table);
-            } catch (\Throwable $e) {
-                Log::warning("Failed to get columns for table: {$table}", ['error' => $e->getMessage()]);
-                return [];
+        return Cache::remember(
+            "fetch-data-columns:{$table}",
+            self::COLUMN_CACHE_TTL,
+            function () use ($table) {
+
+                try {
+
+                    return Schema::getColumnListing($table);
+
+                } catch (\Throwable $e) {
+
+                    Log::warning(
+                        "Failed getting columns for table {$table}",
+                        [
+                            'error' => $e->getMessage(),
+                        ]
+                    );
+
+                    return [];
+                }
             }
-        });
+        );
     }
 
     /**
-     * Apply pagination or simple collection.
+     * Apply pagination.
      */
     private static function applyPagination(Builder $query, int|false $perPage, int|false $limitPagination): LengthAwarePaginator|Collection
     {
-        // No pagination
+        /**
+         * no pagination
+         */
+
         if ($perPage === false) {
-            return $limitPagination === false
-                ? $query->get()
-                : $query->limit($limitPagination)->get();
+            if ($limitPagination !== false) {
+                $query->limit($limitPagination);
+            }
+            return $query->get();
         }
 
-        // Prevent abuse
-        $limit = $limitPagination ? min($perPage, $limitPagination) : $perPage;
+        /**
+         * limit max per page
+         */
+        if ($limitPagination !== false) {
+            $perPage = min($perPage, $limitPagination);
+        }
 
-        return $query->paginate($limit)->withQueryString();
+        return $query->paginate($perPage)->withQueryString();
     }
 }

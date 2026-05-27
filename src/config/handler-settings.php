@@ -23,8 +23,8 @@ return [
 
     'default_sort_direction' => 'desc', // or 'asc'
 
-    // Allow order by relations? (performance consideration)
-    'allow_relation_ordering' => false,
+
+    'allow_relation_ordering' => false, // Allow order by relations? (performance consideration)
     /*
     |--------------------------------------------------------------------------
     | wrapper
