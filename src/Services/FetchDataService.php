@@ -20,7 +20,7 @@ class FetchDataService
      */
     public static function get(
         string|Closure|Builder|Relation $model,
-        string|array|Closure|null       $searchColumns = ['title'],
+        string|array|null               $searchColumns = ['title'],
         array                           $only = ['*'],
         null|int|false                  $perPage = null,
         null|false|int                  $limitPagination = null
@@ -28,8 +28,10 @@ class FetchDataService
     {
         if ($model instanceof Closure) return self::executeClosure($model);
 
-        $perPage =request()->integer('per_page')
-            ?? (is_null($perPage)  ? config('handler-settings.pagination', 25) : $perPage);
+        $perPageFromReq = request()->has('per_page') ? max(1, request()->integer('per_page')) : null;
+        $configPerPage = config('handler-settings.pagination', 25);
+
+        $perPage = $perPageFromReq ?? $perPage ?? $configPerPage ?? 25;
 
         $limitPagination = is_null($limitPagination)
             ? config('handler-settings.limit-pagination', 250)
@@ -43,7 +45,7 @@ class FetchDataService
 
         $query = self::applyOrdering($query);
 
-        return self::applyPagination($query, $perPage , $limitPagination);
+        return self::applyPagination($query, $perPage, $limitPagination);
     }
 
 
@@ -75,7 +77,7 @@ class FetchDataService
             $model instanceof Relation => $model->getQuery(),
             $model instanceof Model    => $model->newQuery(),
             is_string($model)          => (new $model())->newQuery(),
-            default                    => new InvalidArgumentException('Invalid model, builder, or relation provided.')
+            default                    => throw new InvalidArgumentException('Invalid model, builder, or relation provided.')
         };
 
     }
@@ -88,7 +90,17 @@ class FetchDataService
     private static function applyingSelection(Builder $query, string|array $only = ['*']): Builder
     {
         $only = is_array($only) ? $only : [$only];
-        $query->select($only);
+        if ($only !== ['*']) {
+            $model = $query->getModel();
+
+            $primaryKey = $model->getKeyName();
+
+            if (!in_array($primaryKey, $only)) {
+                $only[] = $primaryKey;
+            }
+
+            $query->select($only);
+        }
 
         return $query;
     }
@@ -107,26 +119,61 @@ class FetchDataService
     private static function applySearch(Builder $query, array $searchColumns): Builder
     {
         $searchInputField = config('handler-settings.search_input_field', 's');
+
         $keyword = request()->input($searchInputField);
 
         if (!$keyword) return $query;
 
-        $query->where(function (Builder $q) use ($searchColumns, $keyword) {
-            foreach ($searchColumns as $index => $columnDefinition) {
+        $model = $query->getModel();
+        $table = $model->getTable();
 
+        $validColumns = Schema::getColumnListing($table);
+
+        $query->where(function (Builder $q) use ($searchColumns, $keyword, $validColumns) {
+
+            $first = true;
+
+            foreach ($searchColumns as $columnDefinition) {
 
                 if (is_array($columnDefinition)) {
-                    $column = $columnDefinition['column'] ?? $columnDefinition[0];
-                    $operator = $columnDefinition['operation'] ?? $columnDefinition[1] ?? 'LIKE';
-                    $value = ($operator === 'LIKE') ? "%{$keyword}%" : ($columnDefinition['value'] ?? $keyword);
+
+                    $column = $columnDefinition['column']
+                        ?? $columnDefinition[0]
+                        ?? null;
+
+                    $operator = strtoupper(
+                        $columnDefinition['operation']
+                        ?? $columnDefinition[1]
+                        ?? 'LIKE'
+                    );
+
+                    $value = $operator === 'LIKE'
+                        ? "%{$keyword}%"
+                        : ($columnDefinition['value'] ?? $keyword);
+
                 } else {
+
                     $column = $columnDefinition;
+
                     $operator = 'LIKE';
+
                     $value = "%{$keyword}%";
                 }
 
-                if ($index === 0) {
+                /**
+                 * Security validation
+                 */
+                if (
+                    !is_string($column)
+                    || !preg_match('/^[a-zA-Z0-9_]+$/', $column)
+                    || !in_array($column, $validColumns, true)
+                ) {
+                    continue;
+                }
+
+                if ($first) {
                     $q->where($column, $operator, $value);
+                    $first = false;
                 } else {
                     $q->orWhere($column, $operator, $value);
                 }
@@ -177,7 +224,6 @@ class FetchDataService
      *
      * Determines the number of items per page based on the $pagination parameter,
      * request parameter, or class defaults. Optionally limits pagination to a maximum.
-     * If $pagination is 0, all results are returned without pagination.
      *
      * @param Builder $query The Eloquent query builder instance.
      * @param int|false $perPage
@@ -193,7 +239,7 @@ class FetchDataService
 
         $limit = $limitPagination ? min($perPage, $limitPagination) : $perPage;
 
-        return $limit ? $query->paginate($limit) : $query->get();
+        return $limit ? $query->paginate($limit)->withQueryString() : $query->get();
     }
 
 
