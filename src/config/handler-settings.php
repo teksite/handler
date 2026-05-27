@@ -18,6 +18,13 @@ return [
     'limit-pagination' => env('PAGINATE_LIMITATION', 250), // to prevent data usage max number of items is 250
 
     'search_input_field'   => 's', // search based on the input of request
+
+    'default_order_by' => 'created_at',
+
+    'default_sort_direction' => 'desc', // or 'asc'
+
+    // Allow order by relations? (performance consideration)
+    'allow_relation_ordering' => false,
     /*
     |--------------------------------------------------------------------------
     | wrapper
