@@ -21,6 +21,16 @@ class ResponderServices
     /** ===== Fluent Setters ===== */
 
     /**
+     * @param string|null $title
+     * @return $this
+     */
+    public function title(?string $title = null): static
+    {
+        $this->responder->setTitle($title);
+        return $this;
+    }
+
+    /**
      * @param string|array|null $message
      * @return $this
      */
@@ -30,25 +40,6 @@ class ResponderServices
         return $this;
     }
 
-    /**
-     * @param string|array|null $error
-     * @return $this
-     */
-    public function error(null|string|array $error): static
-    {
-        $this->responder->setError($error);
-        return $this;
-    }
-
-    /**
-     * @param string|null $title
-     * @return $this
-     */
-    public function title(?string $title): static
-    {
-        $this->responder->setTitle($title);
-        return $this;
-    }
 
     /**
      * @param ResponseType $type
@@ -60,6 +51,15 @@ class ResponderServices
         return $this;
     }
 
+    /**
+     * @param string|array|null $error
+     * @return $this
+     */
+    public function error(null|string|array $error = []): static
+    {
+        $this->responder->setError($error);
+        return $this;
+    }
 
     public function statusCode(int|string|null $statusCode = null): static
     {
@@ -83,7 +83,27 @@ class ResponderServices
      */
     public function route(?string $route): static
     {
-        $this->responder->setRoute($route);
+        $this->responder->setUrl(route($route));
+        return $this;
+    }
+
+    /**
+     * @param string|null $url
+     * @return $this
+     */
+    public function url(?string $url): static
+    {
+        if ($url) $this->responder->setUrl($url);
+        return $this;
+    }
+
+    /**
+     * @param string|null $to
+     * @return $this
+     */
+    public function to(?string $to): static
+    {
+        if ($to) $this->responder->setUrl($to);
         return $this;
     }
 
@@ -116,7 +136,8 @@ class ResponderServices
 
     public function success(string|array $message = 'success', mixed $data = [], int $status = 200): static
     {
-        return $this->type(ResponseType::SUCCESS)->statusCode($status)->data($data)->message($message);
+        $this->type(ResponseType::SUCCESS)->statusCode($status)->data($data)->message($message);
+        return $this;
     }
 
     /**
@@ -128,7 +149,8 @@ class ResponderServices
      */
     public function failed(string|array $message = 'failed', string|array $errors = [], int $status = 403, mixed $data = []): static
     {
-        return $this->type(ResponseType::FAILED)->statusCode($status)->data($data)->message($message)->error($errors);
+        $this->type(ResponseType::FAILED)->statusCode($status)->data($data)->message($message)->error($errors);
+        return $this;
     }
 
 
@@ -137,10 +159,11 @@ class ResponderServices
      */
     private function setResponse(ResponseType $type, string|array $message, mixed $data = null, int $status = 200): static
     {
-        return $this->type($type)
-                    ->message($message)
-                    ->data($data)
-                    ->statusCode($status);
+        $this->type($type)
+             ->message($message)
+             ->data($data)
+             ->statusCode($status);
+        return $this;
     }
 
     /** ===== ServiceResult Integration ===== */
@@ -166,13 +189,17 @@ class ResponderServices
     ): static|JsonResponse|Redirector|RedirectResponse
     {
         if ($result->success === true) {
-            $this->success($success_message ?? __('successfully done'), $result->result, $result->successStatus ?? 200)->route($success_route);
+            $this->success($success_message ?? __('successfully done'), $result->result, $result->successStatus ?? 200);
+            if($success_route) $this->responder->setUrl($success_route);
         } else {
-            $this->failed($failed_message ?? __('something went wrong'), ['server' => __('something went wrong')], $result->failedStatus ?? 500)->route($failed_route);
+            $this->failed($failed_message ?? __('something went wrong'), $result->errors ?? ['server' => __('something went wrong')], $result->failedStatus ?? 500);
+            if($failed_route) $this->responder->setUrl($failed_route);
+
         }
         if ($autoReply) {
-            return $this->responder->getRoute() ? $this->go() : $this->reply();
+            return $this->responder->getUrl() ? $this->go() : $this->reply();
         }
+
 
         return $this;
     }

@@ -12,110 +12,91 @@ class ResponderServices
     private ?string $title = null;
     private array $message = [];
     private array $error = [];
-    private null|ResponseType $type = null;
-    private null|int|string $statusCode  = 200;
+    private ?ResponseType $type = null;
+    private int $statusCode = 200;
     private mixed $data = null;
-    private ?string $route = null;
+    private ?string $url = null;
 
-    /**
-     * Set title
-     */
-    public function setTitle(?string $title = null): static
+    public function setTitle(?string $title): void
     {
         $this->title = $title;
-        return $this;
     }
-    /**
-     * Set status code
-     */
-    public function setStatusCode(int|null $statusCode=null): static
-    {
-        $this->statusCode = $statusCode;
-        return $this;
-    }
-    /**
-     * Add message
-     */
-    public function setMessage(null|array|string $message = null): static
+
+    public function setMessage(null|array|string $message): void
     {
         if (!empty($message)) {
-            $this->message = array_merge($this->message, (array)$message);
+            $this->message = array_values(array_filter(
+                array_merge($this->message, (array)$message)
+            ));
         }
-        return $this;
     }
 
-    /**
-     * Add error
-     */
-    public function setError(null|array|string $error = null): static
-    {
-        if ($error !== null) {
-            $this->error = array_merge($this->error, (array)$error);
-        }
-        return $this;
-    }
-
-    /**
-     * Set response type
-     */
-    public function setType(ResponseType $type): static
+    public function setType(ResponseType $type): void
     {
         $this->type = $type;
-        return $this;
     }
 
-    /**
-     * Set data
-     */
-    public function setData(mixed $data = null): static
+    public function setStatusCode(int $statusCode): void
     {
-        $this->data = $data;
-        return $this;
+        $this->statusCode = $statusCode;
     }
 
-
-    /**
-     * Set redirect route
-     */
-    public function setRoute(?string $route = null): static
+    public function setError(null|array|string $error): void
     {
-        $this->route = $route;
-        return $this;
+        if (!empty($error)) {
+            $this->error = array_merge($this->error, (array)$error);
+        }
     }
 
     /**
-     * Convert response to array
+     * set data
      */
+    public function setData(mixed $data): void
+    {
+        if ($data === null || $data === [] || $data === '') return;
+
+        if ($this->data === null) {
+            $this->data = $data;
+        } elseif (is_array($this->data) && is_array($data)) {
+            $this->data = array_merge($this->data, $data);
+        } else {
+            $this->data = $data;
+        }
+    }
+
+    public function setUrl(?string $url): void
+    {
+        $this->url = $url;
+    }
+
+    public function getUrl(): ?string
+    {
+        return $this->url;
+    }
+
     public function toArray(): array
     {
         return array_filter([
-            'title'   => $this->title,
-            'message' => $this->message ?: null,
-            'error'   => $this->error ?: null,
-            'type'    => $this->type?->value,
-            'statusCode'    => $this->statusCode,
-            'data'    => $this->data,
+            'title'      => $this->title,
+            'message'    => $this->message ?: null,
+            'type'       => $this->type?->value,
+            'error'      => $this->error ?: null,
+            'statusCode' => $this->statusCode,
+            'data'       => $this->data,
         ], fn($value) => $value !== null);
     }
 
-    public function getRoute(): ?string
-    {
-        return $this->route;
-    }
-    /**
-     * Redirect with flash
-     */
     public function redirecting(): Redirector|RedirectResponse
     {
-        $redirect = $this->getRoute() ? redirect()->to($this->route) : redirect()->back();
+        $redirect = $this->url
+            ? redirect()->to($this->url)
+            : redirect()->back();
+
         return $redirect->with(['reply' => $this->toArray()]);
     }
 
-    /**
-     * Return JSON response
-     */
-    public function replying(int $statusCode = 200): JsonResponse
+    public function replying(): JsonResponse
     {
-        return response()->json($this->toArray(), $statusCode);
+        return response()->json($this->toArray(), $this->statusCode);
     }
 }
