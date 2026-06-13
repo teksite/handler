@@ -104,10 +104,14 @@ class ResponderServices
     /** ===== Output Methods ===== */
 
     /**
+     * @param string|null $url
      * @return Redirector|RedirectResponse
      */
-    public function go(): Redirector|RedirectResponse
+    public function go(null|string $url =null): Redirector|RedirectResponse
     {
+        if ($url) {
+            $this->responder->setUrl($url);
+        }
         return $this->responder->redirecting();
     }
 
