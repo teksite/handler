@@ -43,9 +43,7 @@ class ResponderServices
 
     public function setError(null|array|string $error): void
     {
-        if (!empty($error)) {
-            $this->error = array_merge($this->error, (array)$error);
-        }
+        if (!empty($error)) $this->error = array_merge($this->error, (array)$error);
     }
 
     /**
