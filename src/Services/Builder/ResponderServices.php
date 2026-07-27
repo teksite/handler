@@ -181,10 +181,10 @@ class ResponderServices
      */
     public function fromResult(
         ServiceResult     $result,
-        ?string           $success_url = null,
-        ?string           $failed_url = null,
         null|string|array $success_message = null,
         null|string|array $failed_message = null,
+        ?string           $success_url = null,
+        ?string           $failed_url = null,
         bool              $autoReply = false
     ): static|JsonResponse|Redirector|RedirectResponse
     {
