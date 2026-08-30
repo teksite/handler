@@ -10,38 +10,29 @@ class HandlerServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->registerConfigFiles();
-        $this->registerFacade();
+        $this->registerBindings();
     }
-
-    private function registerConfigFiles(): void
-    {
-        $configPath = config_path('handler.php');
-
-        $this->mergeConfigFrom( file_exists($configPath) ? $configPath : __DIR__ . '/config/handler.php', 'handler');
-
-    }
-
-
 
     public function boot(): void
     {
         $this->bootPublishFiles();
     }
 
-
-
-    private function registerFacade(): void
+    private function registerConfigFiles(): void
     {
-        $this->app->singleton('Responder', function () {
-            return new ResponderServices();
-        });
+        $this->mergeConfigFrom(__DIR__ . '/config/handler.php', 'handler');
+    }
+
+    private function registerBindings(): void
+    {
+        $this->app->bind(ResponderServices::class, fn () => new ResponderServices());
     }
 
     private function bootPublishFiles(): void
     {
         $this->publishes([
-            __DIR__ . '/config/handler.php' => config_path('handler.php')
-        ], ['handler','handler-config']);
+            __DIR__ . '/config/handler.php' => config_path('handler.php'),
+        ], ['handler', 'handler-config']);
     }
 
 }
