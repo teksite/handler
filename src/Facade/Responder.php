@@ -18,7 +18,7 @@ use Teksite\Handler\Services\Builder\ResponderServices;
  * @method static ResponderServices statusCode(int|string|null $status)
  * @method static ResponderServices success(string|array $message = 'success', mixed $data = [], int $status = 200)
  * @method static ResponderServices failed(string|array $message = 'failed', mixed $data = [], int $status = 500)
- * @method static ResponderServices|JsonResponse|RedirectResponse|Redirector fromResult(\Teksite\Handler\Actions\ServiceResult $result, string|array|null $success_message = null, string|array|null $failed_message = null, string|null $success_route = null, string|null $failed_route = null, bool $autoReply = false)
+ * @method static ResponderServices|JsonResponse|RedirectResponse|Redirector fromResult(\Teksite\Handler\Data\ServiceResult $result, string|array|null $success_message = null, string|array|null $failed_message = null, string|null $success_route = null, string|null $failed_route = null, bool $autoReply = false)
  * @method static JsonResponse reply()
  * @method static RedirectResponse|Redirector go()
  *

@@ -1,6 +1,6 @@
 <?php
 
-namespace Teksite\Handler\Actions;
+namespace Teksite\Handler\Services;
 
 
 use Closure;
@@ -20,9 +20,7 @@ class ServiceWrapper
      * @param bool $useHandler
      * @param bool $wrapServiceResult
      */
-    public function __construct(private readonly bool $useTransaction = true, private readonly bool $wrapServiceResult = true, private readonly bool $useHandler = true)
-    {
-    }
+    public function __construct(private readonly bool $useTransaction = true, private readonly bool $wrapServiceResult = true, private readonly bool $useHandler = true) {}
 
     /**
      * @param bool $hasTransaction
@@ -93,7 +91,8 @@ class ServiceWrapper
 
             return $this->wrapResult($result, true);
         } catch (\Throwable $e) {
-            Log::error($e->getMessage(), ['trace' => $e->getTraceAsString()]);
+
+            if (config('handler.log' ,false)) Log::error('Service execution failed.', ['exception' => $e,]);
 
             if ($dispatchFailureEvent && $failureEventClass && class_exists($failureEventClass)) {
                 $event = app()->make($failureEventClass, array_merge(['exception' => $e], $eventData));
@@ -119,7 +118,7 @@ class ServiceWrapper
     {
         if (!$this->wrapServiceResult) return $result;
 
-        $serviceResultClass = config('handler.service_result_class', \Teksite\Handler\Actions\ServiceResult::class);
+        $serviceResultClass = config('handler.service_result_class', \Teksite\Handler\Data\ServiceResult::class);
 
         if (!class_exists($serviceResultClass)) return $result;
 

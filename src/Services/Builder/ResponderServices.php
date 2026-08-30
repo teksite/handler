@@ -5,7 +5,7 @@ namespace Teksite\Handler\Services\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Redirector;
-use Teksite\Handler\Actions\ServiceResult;
+use Teksite\Handler\Data\ServiceResult;
 use Teksite\Handler\Services\ResponderServices as Service;
 use Teksite\Handler\Enums\ResponseType;
 

@@ -9,9 +9,12 @@
     ],
     "keywords": [
         "laravel",
-        "soft-delete-resource",
+        "error-handler",
+        "service-wrapper",
+        "service-result",
         "api-response",
-        "error-handler"
+        "response-builder",
+        "data-fetcher"
     ],
     "minimum-stability": "dev",
     "prefer-stable": true,
