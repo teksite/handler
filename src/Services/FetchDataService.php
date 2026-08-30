@@ -53,7 +53,6 @@ class FetchDataService implements FetchDataContract
 
         if (!empty($withCount)) $query->withCount($withCount);
 
-        // این‌ها به $this->request نیاز دارن، پس instance-call می‌شن
         if ($searchColumns) $query = $this->applySearch($query, self::normalizeColumns($searchColumns));
 
         $query = $this->applyOrdering($query);
@@ -121,18 +120,14 @@ class FetchDataService implements FetchDataContract
         return $result;
     }
 
-    /**
-     * به $this->request وابسته است → باید instance بمونه.
-     */
+
     private function stringInput(string $key, string $default): string
     {
         $value = $this->request->input($key, $default);
         return is_string($value) ? $value : $default;
     }
 
-    /**
-     * به $this->request وابسته است → باید instance بمونه.
-     */
+
     private function resolvePerPage(null|int|false $perPage): int|false
     {
         if ($perPage === false) return false;
@@ -185,9 +180,7 @@ class FetchDataService implements FetchDataContract
         $query->select(array_values(array_unique($only)));
     }
 
-    /**
-     * از stringInput استفاده می‌کنه (request-dependent) → instance method.
-     */
+
     private function applySearch(Builder $query, array $searchColumns): Builder
     {
         $searchInput = config('handler.search_input_field', 's');
@@ -273,9 +266,7 @@ class FetchDataService implements FetchDataContract
         return last(explode('.', $path));
     }
 
-    /**
-     * از stringInput استفاده می‌کنه (request-dependent) → instance method.
-     */
+
     private function applyOrdering(Builder $query): Builder
     {
         $defaultOrderBy = config('handler.default_order_by', 'created_at');
