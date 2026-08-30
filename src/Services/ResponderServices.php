@@ -24,11 +24,12 @@ class ResponderServices
 
     public function setMessage(null|array|string $message): void
     {
-        if (!empty($message)) {
-            $this->message = array_values(array_filter(
-                array_merge($this->message, (array)$message)
-            ));
-        }
+        if ($message === null || $message === '' || $message === []) return;
+
+        $this->message = array_values(array_filter(
+            array_merge($this->message, (array)$message),
+            static fn($value) => $value !== null && $value !== ''
+        ));
     }
 
     public function setType(ResponseType $type): void
@@ -36,19 +37,18 @@ class ResponderServices
         $this->type = $type;
     }
 
-    public function setStatusCode(int $statusCode): void
+    public function setStatusCode(?int $statusCode): void
     {
-        $this->statusCode = $statusCode;
+        if ($statusCode !== null) $this->statusCode = $statusCode;
     }
 
     public function setError(null|array|string $error): void
     {
-        if (!empty($error)) $this->error = array_merge($this->error, (array)$error);
+        if ($error === null || $error === '' || $error === []) return;
+        $this->error = array_merge($this->error, (array)$error);
     }
 
-    /**
-     * set data
-     */
+
     public function setData(mixed $data): void
     {
         if ($data === null || $data === [] || $data === '') return;

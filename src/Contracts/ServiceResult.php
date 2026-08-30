@@ -1,6 +1,6 @@
 <?php
 
-namespace Teksite\Handler\contracts;
+namespace Teksite\Handler\Contracts;
 
 interface ServiceResult
 {
