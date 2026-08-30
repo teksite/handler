@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
+use Throwable;
 
 class FetchDataService
 {
@@ -31,16 +32,15 @@ class FetchDataService
     ];
 
     /**
-     * Cache lifetime for table columns.
+     * Cache lifetime for table columns (24 hours).
      */
-    private const int COLUMN_CACHE_TTL = 860400;
+    private const int COLUMN_CACHE_TTL = 86400;
 
     /**
      * Hard cap on the raw search keyword length. Prevents pathological
      * LIKE patterns (and unnecessary payload size) from user input.
      */
     private const int MAX_SEARCH_KEYWORD_LENGTH = 255;
-
 
     /**
      * Main fetch method.
@@ -50,7 +50,7 @@ class FetchDataService
         string|array|null             $searchColumns = null,
         array|string                  $only = ['*'],
         int|false|null                $perPage = null,
-        int|false|null                $maxPerPage = null,
+        int|false|null                $limitPagination = null,
         array                         $with = [],
         array                         $withCount = []
     ): mixed
@@ -59,7 +59,8 @@ class FetchDataService
 
         self::applyEagerLoading($query, $with);
 
-        self::applySelection($query, self::normalizeColumns($only));
+
+        self::applySelection($query, self::normalizeColumns($only), $with);
 
         if (!empty($withCount)) $query->withCount($withCount);
 
@@ -70,7 +71,7 @@ class FetchDataService
         return self::applyPagination(
             $query,
             self::resolvePerPage($perPage),
-            self::resolveLimitPagination($maxPerPage)
+            self::resolveLimitPagination($limitPagination)
         );
     }
 
@@ -82,6 +83,7 @@ class FetchDataService
     public static function forgetColumnsCache(string|Model $model): void
     {
         $instance = is_string($model) ? new $model() : $model;
+
         Cache::forget(self::columnsCacheKey($instance->getTable(), $instance->getConnectionName()));
     }
 
@@ -102,8 +104,9 @@ class FetchDataService
     private static function newModelQuery(string $modelClass): Builder
     {
         if (!is_a($modelClass, Model::class, true)) {
-            throw new InvalidArgumentException(sprintf('The given class [%s] must extend [%s].', $modelClass, Model::class),);
+            throw new InvalidArgumentException(sprintf('The given class [%s] must extend [%s].', $modelClass, Model::class));
         }
+
         return (new $modelClass)->newQuery();
     }
 
@@ -113,8 +116,16 @@ class FetchDataService
     }
 
     /**
-     * Normalize a column list that may be given as an array
+     * Normalize a column/definition list that may be given as an array
      * or as a comma-separated string (e.g. "title,slug").
+     *
+     * Used both for plain select-column lists ($only, always strings) and
+     * for search definitions ($searchColumns, which may mix plain column
+     * name strings with array-shaped definitions like
+     * ['column' => 'user.email', 'operation' => '=']). Array entries are
+     * therefore passed through untouched instead of being discarded —
+     * dropping them silently breaks any relation/custom-operator search
+     * definition.
      *
      * @return array<int, string|array>
      */
@@ -125,26 +136,39 @@ class FetchDataService
         $result = [];
 
         foreach ($columns as $column) {
+            if (is_array($column)) {
+                $result[] = $column;
+                continue;
+            }
+
             if (!is_string($column)) continue;
+
             $column = trim($column);
+
             if ($column !== '') $result[] = $column;
         }
 
-        return array_values(array_unique($result));
+        return $result;
     }
 
     private static function stringInput(string $key, string $default): string
     {
         $value = request()->input($key, $default);
+
         return is_string($value) ? $value : $default;
     }
-
 
     /**
      * Resolve per page.
      */
     private static function resolvePerPage(null|int|false $perPage): int|false
     {
+        // The caller explicitly disabled pagination (perPage: false).
+        // Request input must never be able to silently re-enable it —
+        // that would flip the return type from Collection to
+        // LengthAwarePaginator behind the caller's back.
+        if ($perPage === false) return false;
+
         $requestPerPage = request()->integer('per_page');
 
         if ($requestPerPage > 0) return $requestPerPage;
@@ -189,10 +213,9 @@ class FetchDataService
 
                 if (method_exists($relation, 'getForeignKeyName')) $only[] = $relation->getForeignKeyName();
 
-
                 if (method_exists($relation, 'getLocalKeyName')) $only[] = $relation->getLocalKeyName();
 
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 Log::debug("FetchDataService: could not resolve relation '{$relationName}' for column selection.", [
                     'error' => $e->getMessage(),
                 ]);
@@ -275,7 +298,6 @@ class FetchDataService
 
         if (!$column || !is_string($column)) return null;
 
-
         if (!in_array($operator, self::ALLOWED_OPERATORS, true)) {
             $operator = 'LIKE';
         }
@@ -285,15 +307,13 @@ class FetchDataService
             $operator = 'LIKE';
         }
 
-
         if (in_array($operator, ['LIKE', 'ILIKE'], true)) {
             $isUserSuppliedKeyword = $value === $keyword;
             $value = (string)$value;
 
-            if ($isUserSuppliedKeyword)  $value = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
+            if ($isUserSuppliedKeyword) $value = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
 
-            if (!str_contains($value, '%'))  $value = "%{$value}%";
-
+            if (!str_contains($value, '%')) $value = "%{$value}%";
         }
 
         return [
@@ -344,33 +364,42 @@ class FetchDataService
 
         $sort = in_array($sort, ['asc', 'desc'], true) ? $sort : $defaultSort;
 
-        if (str_contains($orderBy, '.'))  $orderBy = $defaultOrderBy;
+        if (str_contains($orderBy, '.')) $orderBy = $defaultOrderBy;
 
-        $columns = self::getTableColumns($query->getModel()->getTable());
+        $model = $query->getModel();
+        $columns = self::getTableColumns($model->getTable(), $model->getConnectionName());
 
         if (!in_array($orderBy, $columns, true)) {
             $orderBy = in_array('created_at', $columns, true)
                 ? 'created_at'
-                : $query->getModel()->getKeyName();
+                : $model->getKeyName();
         }
+
         return $query->orderBy($orderBy, $sort);
     }
 
     /**
      * Get cached table columns.
      */
-    private static function getTableColumns(string $table): array
+    private static function getTableColumns(string $table, ?string $connection = null): array
     {
-        return Cache::remember("fetch-data-columns:{$table}", self::COLUMN_CACHE_TTL, function () use ($table) {
+        return Cache::remember(
+            self::columnsCacheKey($table, $connection),
+            self::COLUMN_CACHE_TTL,
+            function () use ($table, $connection) {
                 try {
-                    return Schema::getColumnListing($table);
-                } catch (\Throwable $e) {
+                    return $connection
+                        ? Schema::connection($connection)->getColumnListing($table)
+                        : Schema::getColumnListing($table);
+                } catch (Throwable $e) {
                     Log::warning(
                         "Failed getting columns for table {$table}",
                         [
-                            'error' => $e->getMessage(),
+                            'connection' => $connection,
+                            'error'      => $e->getMessage(),
                         ]
                     );
+
                     return [];
                 }
             }
@@ -386,21 +415,21 @@ class FetchDataService
          * no pagination
          */
         if ($perPage === false) {
-            if ($limitPagination !== false)  $query->limit($limitPagination);
+            if ($limitPagination !== false) $query->limit($limitPagination);
 
             return $query->get();
         }
 
-
         if ($limitPagination !== false) {
             $perPage = min($perPage, $limitPagination);
         }
+
         return $query->paginate($perPage)->withQueryString();
     }
 
-    private static function columnsCacheKey(?string $connection, string $table): string
+
+    private static function columnsCacheKey(string $table, ?string $connection): string
     {
-        return sprintf('fetch-data:columns:%s:%s', $connection ?: 'default', $table);
+        return sprintf('fetch-data-columns:%s:%s', $connection ?: 'default', $table);
     }
 }
-
