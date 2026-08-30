@@ -13,20 +13,22 @@ class HandlerServiceProvider extends ServiceProvider
         $this->registerFacade();
     }
 
+    private function registerConfigFiles(): void
+    {
+        $configPath = config_path('handler.php');
+
+        $this->mergeConfigFrom( file_exists($configPath) ? $configPath : __DIR__ . '/config/handler.php', 'handler');
+
+    }
+
+
 
     public function boot(): void
     {
         $this->bootPublishFiles();
     }
 
-    private function registerConfigFiles(): void
-    {
-        $configPath = config_path('handler.php');
 
-        $this->mergeConfigFrom(
-            file_exists($configPath) ? $configPath : __DIR__ . '/config/handler.php', 'handler');
-
-    }
 
     private function registerFacade(): void
     {
