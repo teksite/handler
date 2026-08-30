@@ -45,7 +45,7 @@ return [
 
     "service_result_class" => \Teksite\Handler\Data\ServiceResult::class,
 
-    "connection"           => env('HANDLER_DB_CONNECTION'), // e.g. 'mysql', 'pgsql', 'tenant', ...
+    "connection"           => env('HANDLER_DB_CONNECTION') ?? env('DB_CONNECTION'), // e.g. 'mysql', 'pgsql', 'tenant', ...
 
     "log"                  => env('HANDLER_LOG', true),
 
