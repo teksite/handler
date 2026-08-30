@@ -7,7 +7,14 @@
             "email": "sina.zangiband@gmail.com"
         }
     ],
+    "keywords": [
+        "laravel",
+        "soft-delete-resource",
+        "api-response",
+        "error-handler"
+    ],
     "minimum-stability": "dev",
+    "prefer-stable": true,
     "license": "MIT",
     "autoload": {
         "psr-4": {
@@ -17,6 +24,19 @@
     "require": {
         "php": "^8.3",
         "laravel/framework": "^13"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^11.0",
+        "phpunit/phpunit": "^11.5|^12.5"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Teksite\\Handler\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test-coverage": "phpunit --coverage-text"
     },
     "extra": {
         "laravel": {

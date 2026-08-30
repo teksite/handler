@@ -120,7 +120,7 @@ dispatchFailureEvent: false  // Disables failure event dispatch
 ```
 ## Event Classes Configuration:
 
-Define your event classes in config/handler-settings.php:
+Define your event classes in config/handler.php:
 
 ```php
 return [
@@ -249,7 +249,7 @@ use Dispatchable;
 }
 
 ```
-Configure in config/handler-settings.php:
+Configure in config/handler.php:
 
 ```php
 'success_event_class' => \App\Events\UserCreationSucceeded::class,

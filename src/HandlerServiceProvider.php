@@ -21,10 +21,10 @@ class HandlerServiceProvider extends ServiceProvider
 
     private function registerConfigFiles(): void
     {
-        $configPath = config_path('handler-settings.php');
+        $configPath = config_path('handler.php');
 
         $this->mergeConfigFrom(
-            file_exists($configPath) ? $configPath : __DIR__ . '/config/handler-settings.php', 'handler-settings');
+            file_exists($configPath) ? $configPath : __DIR__ . '/config/handler.php', 'handler');
 
     }
 
@@ -38,8 +38,8 @@ class HandlerServiceProvider extends ServiceProvider
     private function bootPublishFiles(): void
     {
         $this->publishes([
-            __DIR__ . '/config/handler-settings.php' => config_path('handler-settings.php')
-        ], 'handler-settings');
+            __DIR__ . '/config/handler.php' => config_path('handler.php')
+        ], ['handler','handler-config']);
     }
 
 }

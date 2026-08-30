@@ -118,7 +118,7 @@ class FetchDataService
 
         if ($requestPerPage > 0) return $requestPerPage;
 
-        return $perPage ?? config('handler-settings.pagination', 25);
+        return $perPage ?? config('handler.pagination', 25);
     }
 
     /**
@@ -126,7 +126,7 @@ class FetchDataService
      */
     private static function resolveLimitPagination(null|false|int $limitPagination): int|false
     {
-        return $limitPagination ?? config('handler-settings.limit-pagination', 250);
+        return $limitPagination ?? config('handler.limit-pagination', 250);
     }
 
     /**
@@ -187,7 +187,7 @@ class FetchDataService
      */
     private static function applySearch(Builder $query, array $searchColumns): Builder
     {
-        $searchInput = config('handler-settings.search_input_field', 's');
+        $searchInput = config('handler.search_input_field', 's');
 
         $keyword = trim((string)request()->input($searchInput, ''));
 
@@ -320,9 +320,9 @@ class FetchDataService
      */
     private static function applyOrdering(Builder $query): Builder
     {
-        $defaultOrderBy = config('handler-settings.default_order_by', 'created_at');
+        $defaultOrderBy = config('handler.default_order_by', 'created_at');
 
-        $defaultSort = strtolower(config('handler-settings.default_sort_direction', 'desc'));
+        $defaultSort = strtolower(config('handler.default_sort_direction', 'desc'));
 
         $orderBy = request()->input('order', $defaultOrderBy);
 

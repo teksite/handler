@@ -33,9 +33,9 @@ class ServiceWrapper
     public static function make(?bool $hasTransaction = null, ?bool $wrapServiceResult = null, ?bool $withHandler = null): self
     {
         return new self(
-            $hasTransaction ?? config('handler-settings.transaction', true),
-            $wrapServiceResult ?? config('handler-settings.service_result', true),
-            $withHandler ?? config('handler-settings.wrapper', true),
+            $hasTransaction ?? config('handler.transaction', true),
+            $wrapServiceResult ?? config('handler.service_result', true),
+            $withHandler ?? config('handler.wrapper', true),
         );
     }
 
@@ -76,8 +76,8 @@ class ServiceWrapper
             return $this->executeAction($this->onSuccess);
         }
 
-        $failureEventClass = config('handler-settings.failure_event_class');
-        $successEventClass = config('handler-settings.success_event_class');
+        $failureEventClass = config('handler.failure_event_class');
+        $successEventClass = config('handler.success_event_class');
         $eventData = array_merge($this->eventData, $additionalEventData);
 
 
@@ -119,7 +119,7 @@ class ServiceWrapper
     {
         if (!$this->wrapServiceResult) return $result;
 
-        $serviceResultClass = config('handler-settings.service_result_class', \Teksite\Handler\Actions\ServiceResult::class);
+        $serviceResultClass = config('handler.service_result_class', \Teksite\Handler\Actions\ServiceResult::class);
 
         if (!class_exists($serviceResultClass)) return $result;
 
