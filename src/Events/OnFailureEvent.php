@@ -14,9 +14,9 @@ class OnFailureEvent
     /**
      * Create a new event instance.
      */
-    public function __construct()
-    {
-        //
-    }
+    public function __construct(
+        public readonly \Throwable $exception,
+        public readonly array      $data = [],
+    ) {}
 
 }

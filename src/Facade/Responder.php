@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Teksite\Handler\Facade;
 
 use Illuminate\Http\JsonResponse;

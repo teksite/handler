@@ -5,6 +5,7 @@ namespace Teksite\Handler\Services;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -12,40 +13,29 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
+use Teksite\Handler\Contracts\FetchDataContract;
 use Throwable;
 
-class FetchDataService
+class FetchDataService implements FetchDataContract
 {
-    /**
-     * Allowed SQL operators.
-     */
     private const array ALLOWED_OPERATORS = [
-        '=',
-        '!=',
-        '<>',
-        '>',
-        '<',
-        '<=',
-        '>=',
-        'LIKE',
-        'ILIKE',
+        '=', '!=', '<>', '>', '<', '<=', '>=', 'LIKE', 'ILIKE',
     ];
 
-    /**
-     * Cache lifetime for table columns (24 hours).
-     */
     private const int COLUMN_CACHE_TTL = 86400;
 
-    /**
-     * Hard cap on the raw search keyword length. Prevents pathological
-     * LIKE patterns (and unnecessary payload size) from user input.
-     */
     private const int MAX_SEARCH_KEYWORD_LENGTH = 255;
+
+    private const string COLUMNS_REGISTRY_KEY = 'fetch-data-columns:__registry';
+
+    public function __construct(
+        private readonly Request $request
+    ) {}
 
     /**
      * Main fetch method.
      */
-    public static function get(
+    public function get(
         string|Model|Builder|Relation $model,
         string|array|null             $searchColumns = null,
         array|string                  $only = ['*'],
@@ -53,43 +43,37 @@ class FetchDataService
         int|false|null                $limitPagination = null,
         array                         $with = [],
         array                         $withCount = []
-    ): mixed
+    ): Collection|LengthAwarePaginator
     {
         $query = self::resolveQuery($model);
 
         self::applyEagerLoading($query, $with);
 
-
         self::applySelection($query, self::normalizeColumns($only), $with);
 
         if (!empty($withCount)) $query->withCount($withCount);
 
-        if ($searchColumns) $query = self::applySearch($query, self::normalizeColumns($searchColumns));
+        // این‌ها به $this->request نیاز دارن، پس instance-call می‌شن
+        if ($searchColumns) $query = $this->applySearch($query, self::normalizeColumns($searchColumns));
 
-        $query = self::applyOrdering($query);
+        $query = $this->applyOrdering($query);
 
         return self::applyPagination(
             $query,
-            self::resolvePerPage($perPage),
+            $this->resolvePerPage($perPage),
             self::resolveLimitPagination($limitPagination)
         );
     }
 
     /**
      * Clear cached columns for a model.
-     *
-     * @param class-string<Model>|Model $model
      */
     public static function forgetColumnsCache(string|Model $model): void
     {
         $instance = is_string($model) ? new $model() : $model;
-
         Cache::forget(self::columnsCacheKey($instance->getTable(), $instance->getConnectionName()));
     }
 
-    /**
-     * Convert model/builder/relation into Builder.
-     */
     private static function resolveQuery(string|Model|Builder|Relation $model): Builder
     {
         return match (true) {
@@ -115,20 +99,6 @@ class FetchDataService
         if ($with !== []) $query->with($with);
     }
 
-    /**
-     * Normalize a column/definition list that may be given as an array
-     * or as a comma-separated string (e.g. "title,slug").
-     *
-     * Used both for plain select-column lists ($only, always strings) and
-     * for search definitions ($searchColumns, which may mix plain column
-     * name strings with array-shaped definitions like
-     * ['column' => 'user.email', 'operation' => '=']). Array entries are
-     * therefore passed through untouched instead of being discarded —
-     * dropping them silently breaks any relation/custom-operator search
-     * definition.
-     *
-     * @return array<int, string|array>
-     */
     private static function normalizeColumns(array|string $columns): array
     {
         if (is_string($columns)) $columns = explode(',', $columns);
@@ -151,48 +121,39 @@ class FetchDataService
         return $result;
     }
 
-    private static function stringInput(string $key, string $default): string
+    /**
+     * به $this->request وابسته است → باید instance بمونه.
+     */
+    private function stringInput(string $key, string $default): string
     {
-        $value = request()->input($key, $default);
-
+        $value = $this->request->input($key, $default);
         return is_string($value) ? $value : $default;
     }
 
     /**
-     * Resolve per page.
+     * به $this->request وابسته است → باید instance بمونه.
      */
-    private static function resolvePerPage(null|int|false $perPage): int|false
+    private function resolvePerPage(null|int|false $perPage): int|false
     {
-        // The caller explicitly disabled pagination (perPage: false).
-        // Request input must never be able to silently re-enable it —
-        // that would flip the return type from Collection to
-        // LengthAwarePaginator behind the caller's back.
         if ($perPage === false) return false;
 
-        $requestPerPage = request()->integer('per_page');
+        $requestPerPage = $this->request->integer('per_page');
 
         if ($requestPerPage > 0) return $requestPerPage;
 
         return $perPage ?? config('handler.pagination', 25);
     }
 
-    /**
-     * Resolve max pagination limit.
-     */
     private static function resolveLimitPagination(null|false|int $limitPagination): int|false
     {
         return $limitPagination ?? config('handler.limit-pagination', 250);
     }
 
-    /**
-     * Apply select.
-     */
     private static function applySelection(Builder $query, array $only, array $with = []): void
     {
         if ($only === [] || in_array('*', $only, true)) return;
 
         $model = $query->getModel();
-
         $primaryKey = $model->getKeyName();
 
         if (!in_array($primaryKey, $only, true)) $only[] = $primaryKey;
@@ -212,7 +173,6 @@ class FetchDataService
                 if (!$relation instanceof Relation) continue;
 
                 if (method_exists($relation, 'getForeignKeyName')) $only[] = $relation->getForeignKeyName();
-
                 if (method_exists($relation, 'getLocalKeyName')) $only[] = $relation->getLocalKeyName();
 
             } catch (Throwable $e) {
@@ -226,13 +186,13 @@ class FetchDataService
     }
 
     /**
-     * Apply search.
+     * از stringInput استفاده می‌کنه (request-dependent) → instance method.
      */
-    private static function applySearch(Builder $query, array $searchColumns): Builder
+    private function applySearch(Builder $query, array $searchColumns): Builder
     {
         $searchInput = config('handler.search_input_field', 's');
 
-        $keyword = trim(self::stringInput($searchInput, ''));
+        $keyword = trim($this->stringInput($searchInput, ''));
 
         if ($keyword === '') return $query;
 
@@ -249,47 +209,31 @@ class FetchDataService
 
                 ['column' => $column, 'operator' => $operator, 'value' => $value] = $condition;
 
-                /**
-                 * Relation search
-                 */
                 if (str_contains($column, '.')) {
-
                     $relation = self::extractRelationName($column);
                     $field = self::extractColumnName($column);
                     $method = $hasCondition ? 'orWhereHas' : 'whereHas';
 
                     $q->{$method}($relation, fn(Builder $rq) => $rq->where($field, $operator, $value));
                     $hasCondition = true;
-
                     continue;
                 }
 
-                /**
-                 * Direct column
-                 */
                 $method = $hasCondition ? 'orWhere' : 'where';
                 $q->{$method}($column, $operator, $value);
                 $hasCondition = true;
             }
 
             if (!$hasCondition) $q->whereRaw('1 = 0');
-
         });
     }
 
-    /**
-     * Parse search condition.
-     */
     private static function parseSearchCondition(string|array $definition, string $keyword): ?array
     {
         if (is_array($definition)) {
-
             $column = $definition['column'] ?? $definition[0] ?? null;
-
             $operator = strtoupper((string)($definition['operation'] ?? $definition[1] ?? 'LIKE'));
-
             $value = $definition['value'] ?? $definition[2] ?? $keyword;
-
         } else {
             $column = $definition;
             $operator = 'LIKE';
@@ -302,7 +246,6 @@ class FetchDataService
             $operator = 'LIKE';
         }
 
-        // PostgreSQL only
         if ($operator === 'ILIKE' && DB::getDriverName() !== 'pgsql') {
             $operator = 'LIKE';
         }
@@ -312,56 +255,34 @@ class FetchDataService
             $value = (string)$value;
 
             if ($isUserSuppliedKeyword) $value = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
-
             if (!str_contains($value, '%')) $value = "%{$value}%";
         }
 
-        return [
-            'column'   => $column,
-            'operator' => $operator,
-            'value'    => $value,
-        ];
+        return ['column' => $column, 'operator' => $operator, 'value' => $value];
     }
 
-    /**
-     * Extract relation path.
-     *
-     * user.profile.name
-     * => user.profile
-     */
     private static function extractRelationName(string $path): string
     {
         $parts = explode('.', $path);
-
         array_pop($parts);
-
         return implode('.', $parts);
     }
 
-    /**
-     * Extract field name.
-     *
-     * user.profile.name
-     * => name
-     */
     private static function extractColumnName(string $path): string
     {
         return last(explode('.', $path));
     }
 
     /**
-     * Apply ordering.
+     * از stringInput استفاده می‌کنه (request-dependent) → instance method.
      */
-    private static function applyOrdering(Builder $query): Builder
+    private function applyOrdering(Builder $query): Builder
     {
         $defaultOrderBy = config('handler.default_order_by', 'created_at');
-
         $defaultSort = strtolower((string)config('handler.default_sort_direction', 'desc'));
 
-        $orderBy = self::stringInput('order', $defaultOrderBy);
-
-        $sort = strtolower(self::stringInput('sort', $defaultSort));
-
+        $orderBy = $this->stringInput('order', $defaultOrderBy);
+        $sort = strtolower($this->stringInput('sort', $defaultSort));
         $sort = in_array($sort, ['asc', 'desc'], true) ? $sort : $defaultSort;
 
         if (str_contains($orderBy, '.')) $orderBy = $defaultOrderBy;
@@ -378,45 +299,52 @@ class FetchDataService
         return $query->orderBy($orderBy, $sort);
     }
 
-    /**
-     * Get cached table columns.
-     */
     private static function getTableColumns(string $table, ?string $connection = null): array
     {
-        return Cache::remember(
-            self::columnsCacheKey($table, $connection),
-            self::COLUMN_CACHE_TTL,
-            function () use ($table, $connection) {
-                try {
-                    return $connection
-                        ? Schema::connection($connection)->getColumnListing($table)
-                        : Schema::getColumnListing($table);
-                } catch (Throwable $e) {
-                    Log::warning(
-                        "Failed getting columns for table {$table}",
-                        [
-                            'connection' => $connection,
-                            'error'      => $e->getMessage(),
-                        ]
-                    );
+        $key = self::columnsCacheKey($table, $connection);
 
-                    return [];
-                }
+        self::registerCacheKey($key);
+
+        return Cache::remember($key, self::COLUMN_CACHE_TTL, function () use ($table, $connection) {
+            try {
+                return $connection
+                    ? Schema::connection($connection)->getColumnListing($table)
+                    : Schema::getColumnListing($table);
+            } catch (Throwable $e) {
+                Log::warning("Failed getting columns for table {$table}", [
+                    'connection' => $connection,
+                    'error'      => $e->getMessage(),
+                ]);
+                return [];
             }
-        );
+        });
     }
 
-    /**
-     * Apply pagination.
-     */
+    private static function registerCacheKey(string $key): void
+    {
+        $registry = Cache::get(self::COLUMNS_REGISTRY_KEY, []);
+
+        if (!in_array($key, $registry, true)) {
+            $registry[] = $key;
+            Cache::forever(self::COLUMNS_REGISTRY_KEY, $registry);
+        }
+    }
+
+    public static function forgetAllColumnsCache(): void
+    {
+        $registry = Cache::get(self::COLUMNS_REGISTRY_KEY, []);
+
+        foreach ($registry as $key) {
+            Cache::forget($key);
+        }
+
+        Cache::forget(self::COLUMNS_REGISTRY_KEY);
+    }
+
     private static function applyPagination(Builder $query, int|false $perPage, int|false $limitPagination): LengthAwarePaginator|Collection
     {
-        /**
-         * no pagination
-         */
         if ($perPage === false) {
             if ($limitPagination !== false) $query->limit($limitPagination);
-
             return $query->get();
         }
 
@@ -426,7 +354,6 @@ class FetchDataService
 
         return $query->paginate($perPage)->withQueryString();
     }
-
 
     private static function columnsCacheKey(string $table, ?string $connection): string
     {
