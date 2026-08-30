@@ -43,14 +43,16 @@ class ServiceWrapper
      * @param bool $hasTransaction
      * @param bool $wrapServiceResult
      * @param bool $withHandler
+     * @param string|null $connection
      * @return self
      */
-    public static function make(?bool $hasTransaction = null, ?bool $wrapServiceResult = null, ?bool $withHandler = null): self
+    public static function make(?bool $hasTransaction = null, ?bool $wrapServiceResult = null, ?bool $withHandler = null, ?string $connection = null): self
     {
         return new self(
             $hasTransaction ?? config('handler.transaction', true),
             $wrapServiceResult ?? config('handler.service_result', true),
             $withHandler ?? config('handler.wrapper', true),
+            $connection,
         );
     }
 
