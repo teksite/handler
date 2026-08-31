@@ -137,11 +137,10 @@ class ResponderServices
                 $this->failed($failed_message ?? __('something went wrong'),
                     $result->errors ?? ['server' => __('something went wrong')],
                     $result->failedStatus ?? 500);
-                if ($success_url) $this->url($failed_url);
+                if ($failed_url) $this->url($failed_url);
             }
 
             if ($autoReply) return $this->responder->getUrl() ? $this->go() : $this->reply();
-
 
             return $this;
         }
