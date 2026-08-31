@@ -97,7 +97,6 @@ class FetchDataService implements FetchDataContract
 
         if ($columns === []) return $this;
 
-
         if (in_array('*', $columns, true)) {
             $this->onlyColumns = ['*'];
             return $this;
@@ -106,7 +105,6 @@ class FetchDataService implements FetchDataContract
         if (in_array('*', $this->onlyColumns, true)) {
             return $this;
         }
-
         $this->onlyColumns = self::uniqueColumns([
             ...$this->onlyColumns,
             ...$columns,
@@ -320,7 +318,7 @@ class FetchDataService implements FetchDataContract
     public function get(
         string|Model|Builder|Relation $model,
         string|array|null             $searchColumns = null,
-        array|string                  $only = ['*'],
+        array|string                  $only = null,
         int|false|null                $perPage = null,
         int|false|null                $limitPagination = null,
         array                         $with = [],
@@ -432,7 +430,6 @@ class FetchDataService implements FetchDataContract
     {
 
         if ($only === [] || in_array('*', $only, true)) return;
-
         $model = $query->getModel();
 
         $primaryKey = $model->getKeyName();
@@ -903,6 +900,7 @@ class FetchDataService implements FetchDataContract
     {
 
         if (in_array('*', $fluentColumns, true) || in_array('*', $getColumns, true)) return ['*'];
+        if ($fluentColumns === [] && $getColumns === [])  return ['*'];
         return self::uniqueColumns([...$fluentColumns, ...$getColumns,]);
     }
 }
