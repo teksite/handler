@@ -318,7 +318,7 @@ class FetchDataService implements FetchDataContract
     public function get(
         string|Model|Builder|Relation $model,
         string|array|null             $searchColumns = null,
-        array|string                  $only = null,
+        array|string|null             $only = null,
         int|false|null                $perPage = null,
         int|false|null                $limitPagination = null,
         array                         $with = [],
@@ -900,7 +900,7 @@ class FetchDataService implements FetchDataContract
     {
 
         if (in_array('*', $fluentColumns, true) || in_array('*', $getColumns, true)) return ['*'];
-        if ($fluentColumns === [] && $getColumns === [])  return ['*'];
+        if ($fluentColumns === [] && $getColumns === []) return ['*'];
         return self::uniqueColumns([...$fluentColumns, ...$getColumns,]);
     }
 }

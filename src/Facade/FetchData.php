@@ -22,15 +22,7 @@ use Teksite\Handler\Contracts\FetchDataContract;
  * @method static \Teksite\Handler\Contracts\FetchDataContract resetPagination()
  * @method static \Teksite\Handler\Contracts\FetchDataContract reset()
  *
- * @method static \Illuminate\Support\Collection|\Illuminate\Pagination\LengthAwarePaginator get(
-     string|\Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation $model,
-     string|array|null $searchColumns = null,
-     array|string $only = ['*'],
-     int|false|null $perPage = null,
-     int|false|null $limitPagination = null,
-     array $with = [],
-     array $withCount = []
- )
+ * @method static \Illuminate\Support\Collection|\Illuminate\Pagination\LengthAwarePaginator get( string|\Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation $model, string|array|null $searchColumns = null, array|string|null $only = null, int|false|null $perPage = null, int|false|null $limitPagination = null, array $with = [], array $withCount = [])
  *
  * @method static void forgetColumnsCache(string|\Illuminate\Database\Eloquent\Model $model)
  * @method static void forgetAllColumnsCache()
