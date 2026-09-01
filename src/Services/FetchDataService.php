@@ -7,21 +7,16 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
+use Teksite\Handler\Traits\FetchServiceCache;
+use Throwable;
 
 //use Teksite\Handler\Contracts\FetchDataContract;
-use Teksite\Handler\FetchDataHelper;
-use Throwable;
 
 class FetchDataService
 {
-    use FetchDataHelper;
+    use FetchServiceCache;
 
     private Builder|null $query = null;
 

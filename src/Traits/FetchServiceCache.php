@@ -1,12 +1,12 @@
 <?php
 
-namespace Teksite\Handler;
+namespace Teksite\Handler\Traits;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
-trait FetchDataHelper
+trait FetchServiceCache
 {
 
     private const int COLUMN_CACHE_TTL = 86400;
@@ -40,7 +40,7 @@ trait FetchDataHelper
         }
         );
     }
-    
+
     private function registerCacheKey(string $key): void
     {
         $registry = Cache::get(self::COLUMNS_REGISTRY_KEY, []);
