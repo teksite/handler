@@ -19,6 +19,8 @@ return [
 
     'search_input_field' => 's', // search based on the input of request
 
+    'per_page_query' => 'per_page', // search based on the input of request
+
     'default_order_by' => 'created_at',
 
     'default_sort_direction' => 'desc', // or 'asc'
