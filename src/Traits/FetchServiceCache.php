@@ -37,8 +37,7 @@ trait FetchServiceCache
 
                 return [];
             }
-        }
-        );
+        });
     }
 
     private function registerCacheKey(string $key): void
