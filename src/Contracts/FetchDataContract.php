@@ -18,5 +18,5 @@ interface FetchDataContract {
         int|false|null                $limitPagination = null,
         array                         $with = [],
         array                         $withCount = []
-    ): LengthAwarePaginator|Collection;
+    ): static;
 }

@@ -13,9 +13,9 @@ use InvalidArgumentException;
 use Teksite\Handler\Traits\FetchServiceCache;
 use Throwable;
 
-//use Teksite\Handler\Contracts\FetchDataContract;
+use Teksite\Handler\Contracts\FetchDataContract;
 
-class FetchDataService
+class FetchDataService implements FetchDataContract
 {
     use FetchServiceCache;
 
@@ -47,7 +47,7 @@ class FetchDataService
         int|false|null                        $limitPagination = null,
         array                                 $with = [],
         array                                 $withCount = []
-    ): FetchDataService
+    ): static
     {
         $this->resolveQuery($model);
         $this->withRelations = $this->mergeRelations($this->withRelations, $this->normalizeRelations($with));
