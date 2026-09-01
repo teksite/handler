@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Teksite\Handler\Traits\FetchServiceCache;
@@ -35,14 +36,7 @@ class FetchDataService
     private const array ALLOWED_SORT_DIRECTIONS = ['asc', 'desc',];
 
 
-    public function __construct(private readonly Request $request)
-    {
-//        $this->perPage = config('handler.pagination', 25);
-//        $this->maxPagination = config('handler.limit-pagination', 250);
-//        $this->searchField = config('handler.search_input_field');
-//        $this->orderBy = config('handler.default_order_by', 'created_at');
-//        $this->sortDirection = config('handler.default_sort_direction', 'desc');
-    }
+    public function __construct(private readonly Request $request) {}
 
 
     public function get(
@@ -56,10 +50,10 @@ class FetchDataService
     ): FetchDataService
     {
         $this->resolveQuery($model);
-        $this->withRelations = self::mergeRelations($this->withRelations, $this->normalizeRelations($with));
-        $this->withCountRelations = self::mergeRelations($this->withCountRelations, $this->normalizeRelations($withCount));
+        $this->withRelations = $this->mergeRelations($this->withRelations, $this->normalizeRelations($with));
+        $this->withCountRelations = $this->mergeRelations($this->withCountRelations, $this->normalizeRelations($withCount));
         $this->only = $this->mergeColumns($this->only, $this->normalizeColumns($only));
-        $this->searchColumns = self::uniqueColumns([...$this->searchColumns, ...$this->normalizeColumns($searchColumns ?? [])]);
+        $this->searchColumns = $this->uniqueColumns([...$this->searchColumns, ...$this->normalizeColumns($searchColumns ?? [])]);
         $this->perPage = $perPage;
         $this->maxPagination = $limitPagination;
         return $this;
@@ -78,7 +72,7 @@ class FetchDataService
 
             $model instanceof Model    => $model->newQuery(),
 
-            is_string($model)          => self::newModelQuery($model),
+            is_string($model)          => $this->newModelQuery($model),
 
             default                    => throw new InvalidArgumentException(
                 sprintf(
@@ -90,19 +84,32 @@ class FetchDataService
         $this->query = $query;
     }
 
-
-    public function with(array|string|Closure $relations)
+    private function newModelQuery(string $modelClass): Builder
     {
-        $relations = self::normalizeRelations($relations);
+        if (!is_a($modelClass, Model::class, true)) {
+            throw new InvalidArgumentException(
+                sprintf(
+                    'The given class [%s] must extend [%s].',
+                    $modelClass,
+                    Model::class
+                )
+            );
+        }
+        return (new $modelClass)->newQuery();
+    }
+
+    public function with(array|string|Closure $relations): static
+    {
+        $relations = $this->normalizeRelations($relations);
 
         if ($relations === []) return $this;
 
-        $this->withRelations = self::mergeRelations($this->withRelations, $relations);
+        $this->withRelations = $this->mergeRelations($this->withRelations, $relations);
 
         return $this;
     }
 
-    public function withCount(array|string|Closure $relations)
+    public function withCount(array|string|Closure $relations): static
     {
         $relations = $this->normalizeRelations($relations);
 
@@ -216,7 +223,7 @@ class FetchDataService
 
         if ($fluentColumns === [] && $getColumns === []) return ['*'];
 
-        return self::uniqueColumns([...$fluentColumns, ...$getColumns,]);
+        return $this->uniqueColumns([...$fluentColumns, ...$getColumns,]);
     }
 
     private function uniqueColumns(array $columns): array
@@ -256,7 +263,7 @@ class FetchDataService
 
     private function applyEagerLoading(): void
     {
-        $relations = $this->withRelations
+        $relations = $this->withRelations;
         if ($relations !== []) $this->query->with($relations);
     }
 
@@ -283,7 +290,7 @@ class FetchDataService
 
         $this->addRelationKeys($model, $only, $with);
 
-        $this->query->select(self::uniqueColumns($only));
+        $this->query->select($this->uniqueColumns($only));
     }
 
     private function addRelationKeys(Model $model, array &$columns, array $relations): void
@@ -356,7 +363,8 @@ class FetchDataService
     private function applyPagination(): void
     {
         $perPage = $this->resolvePerPage($this->perPage);
-        $limitPagination = $this->resolveLimitPagination($this->maxPagination)
+
+        $limitPagination = $this->resolveLimitPagination($this->maxPagination);
 
         if ($perPage === false) {
             if ($limitPagination !== false) $this->query->limit($limitPagination);
@@ -368,7 +376,6 @@ class FetchDataService
 
         $this->query->paginate($perPage)->withQueryString();
     }
-
 
     private function applyOrdering(): void
     {
@@ -389,7 +396,7 @@ class FetchDataService
 
         $model = $this->query->getModel();
 
-        $columns = self::getTableColumns($model->getTable(), $model->getConnectionName());
+        $columns = $this->getTableColumns($model->getTable(), $model->getConnectionName());
 
         /*
          * Validate order column against real DB columns.
@@ -400,6 +407,141 @@ class FetchDataService
                 : $model->getKeyName();
         }
         $this->query->orderBy($orderBy, $sort);
+    }
+
+
+    private function applySearch(): void
+    {
+        $searchColumns= $this->searchColumns;
+
+        $searchInput = config('handler.search_input_field', 's');
+
+        $keyword = trim($this->stringInput($searchInput, ''));
+
+        if ($keyword === '') return;
+
+
+        $keyword = mb_substr($keyword, 0, self::MAX_SEARCH_KEYWORD_LENGTH);
+
+        $this->query->where(function (Builder $q) use ($searchColumns, $keyword) {
+
+            $hasCondition = false;
+
+            foreach ($searchColumns as $definition) {
+
+                if (!is_string($definition) && !is_array($definition)) continue;
+
+                $condition = $this->parseSearchCondition($definition, $keyword);
+
+                if ($condition === null) continue;
+
+                ['column' => $column, 'operator' => $operator, 'value' => $value,] = $condition;
+
+                /*
+                 * Relation search:
+                 *
+                 * user.name
+                 */
+                if (str_contains($column, '.')) {
+                    $relation = $this->extractRelationName($column);
+
+                    $field = $this->extractColumnName($column);
+
+                    $method = $hasCondition ? 'orWhereHas' : 'whereHas';
+
+                    $q->{$method}($relation, fn(Builder $rq) => $rq->where($field, $operator, $value));
+
+                    $hasCondition = true;
+
+                    continue;
+                }
+
+                $method = $hasCondition ? 'orWhere' : 'where';
+
+                $q->{$method}($column, $operator, $value);
+
+                $hasCondition = true;
+            }
+
+            /*
+             * Invalid/empty search definition:
+             * return no records rather than all records.
+             */
+            if (!$hasCondition) $q->whereRaw('1 = 0');
+
+        });
+    }
+
+    private function parseSearchCondition(string|array $definition, string $keyword): ?array
+    {
+        $valueProvided = false;
+
+        if (is_array($definition)) {
+            $column = $definition['column'] ?? $definition[0] ?? null;
+
+            $operator = strtoupper((string)($definition['operation'] ?? $definition['operator'] ?? $definition[1] ?? 'LIKE'));
+
+            if (array_key_exists('value', $definition)) {
+                $value = $definition['value'];
+                $valueProvided = true;
+            } elseif (array_key_exists(2, $definition)) {
+                $value = $definition[2];
+                $valueProvided = true;
+            } else {
+                $value = $keyword;
+            }
+        } else {
+            $column = $definition;
+            $operator = 'LIKE';
+            $value = $keyword;
+        }
+
+        if (!is_string($column) || trim($column) === '') return null;
+
+
+        $column = trim($column);
+
+        if (!in_array($operator, self::ALLOWED_OPERATORS, true)) $operator = 'LIKE';
+
+
+        /*
+         * ILIKE only exists on PostgreSQL.
+         */
+        if ($operator === 'ILIKE' && DB::getDriverName() !== 'pgsql') $operator = 'LIKE';
+
+
+        if (in_array($operator, ['LIKE', 'ILIKE'], true)) {
+            $value = (string)$value;
+
+            /*
+             * Escape LIKE wildcards only when the value
+             * comes from the user's search keyword.
+             *
+             * Explicit values are considered intentional.
+             */
+            if (!$valueProvided) $value = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
+
+            if (!str_contains($value, '%')) $value = "%{$value}%";
+
+        }
+
+        return [
+            'column'   => $column,
+            'operator' => $operator,
+            'value'    => $value,
+        ];
+    }
+
+    private function extractRelationName(string $path): string
+    {
+        $parts = explode('.', $path);
+        array_pop($parts);
+        return implode('.', $parts);
+    }
+
+    private function extractColumnName(string $path): string
+    {
+        return (string)last(explode('.', $path));
     }
 
 
