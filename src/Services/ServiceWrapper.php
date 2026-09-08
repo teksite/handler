@@ -129,7 +129,8 @@ class ServiceWrapper
                 return $this->wrapResult($result, false);
             }
 
-            throw $e;
+            return $this->wrapResult(null, false);
+
         }
     }
 
