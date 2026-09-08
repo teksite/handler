@@ -19,7 +19,5 @@ final readonly class ServiceResult implements contract
         public string|array|null $errors = null,
         public ?int              $successStatus = null,
         public ?int              $failedStatus = null,
-
-
     ) {}
 }

@@ -136,6 +136,8 @@ class ServiceWrapper
 
     /**
      * Runs the success closure, optionally wrapped in a DB transaction on the configured connection.
+     *
+     * @throws \Throwable
      */
     private function executeWithTransaction(): mixed
     {

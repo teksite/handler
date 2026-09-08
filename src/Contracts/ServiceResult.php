@@ -4,7 +4,5 @@ namespace Teksite\Handler\Contracts;
 
 interface ServiceResult
 {
-    public function __construct(bool $success,mixed $result);
-
-
+    public function __construct(bool $success, mixed $result);
 }
