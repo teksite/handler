@@ -55,7 +55,7 @@ Add the service provider to the bootstrap/providers.php file:
 ```php
 'providers' => [
 // Other Service Providers
-Teksite\Handler\ServiceProvider::class,
+Teksite\Handler\HandlerServiceProvider::class,
 ],
 ```
 
@@ -98,7 +98,7 @@ ServiceWrapper::make(wrapServiceResult: false)->do(fn() => $this->someMethod())-
 The `run()` method accepts two optional parameters to dispatch custom events:
 
 ```php
-public function run(bool $dispatchSuccessEvent = false, bool $dispatchFailureEvent = true): mixed
+public function run(bool $dispatchSuccessEvent = false, bool $dispatchFailureEvent = false): mixed
 ```
 
 Example:
@@ -155,16 +155,22 @@ $rawResult = ServiceWrapper::make(wrapServiceResult: false)->do(fn() => Post::fi
 
 ### Streamlined Database Query Methods
 
-```Teksite\Handler\Services\FetchDataService```
+`Teksite\Handler\Facade\FetchData` (backed by `Teksite\Handler\Services\FetchDataService`)
+
+`FetchDataService` is resolved from the container (it depends on the current `Request`), so use the
+`FetchData` facade or dependency injection - it is **not** a static class.
 
 #### Example with ServiceWrapper
 
 ```php
+use Teksite\Handler\Facade\FetchData;
+use Teksite\Handler\Services\ServiceWrapper;
+
 public function get(mixed $fetchData = [])
 {
 return ServiceWrapper::make()
 ->do(function () use ($fetchData) {
-return FetchDataService::get(Post::class, ['title'], ...$fetchData);
+return FetchData::get(Post::class, ['title'], ...$fetchData);
 })
 ->ifFailed(function () {
 // Handle failure
@@ -176,20 +182,43 @@ return FetchDataService::get(Post::class, ['title'], ...$fetchData);
 #### Standalone Usage
 
 ```php
+use Teksite\Handler\Facade\FetchData;
+
 // Without ServiceWrapper
-$posts = FetchDataService::get(Post::class, ['title']);
+$posts = FetchData::get(Post::class, ['title']);
+```
+
+#### Fluent Usage
+
+Every option can also be set fluently before calling `get()`, which is handy when the same query is
+built up conditionally:
+
+```php
+$posts = FetchData::only(['id', 'title'])
+->with(['user'])
+->search(['title', 'category'])
+->orderBy('title')
+->sort('asc')
+->perPage(20)
+->limitPagination(100)
+->get(Post::class);
+
+// Clear all fluent configuration on a shared instance before reusing it
+FetchData::reset();
 ```
 
 #### Method Parameters
 
 ```php
-FetchDataService::get(
-string|Closure|Builder|Relation $model,  // Model class, query builder, or relation
-string|array|Closure|null $searchColumns, // Search columns with operators
-array $only = ['*'],                       // Columns to select
-null|int|false $perPage = null,            // Items per page (pagination)
-null|false|int $limitPagination = null     // Maximum items per page limit
-);
+FetchData::get(
+string|Model|Builder|Relation|Closure $model,  // Model class, model instance, query builder, relation, or a closure returning a Builder
+string|array|null $searchColumns = null,        // Search columns with operators
+array|string|null $only = null,                 // Columns to select (defaults to all)
+null|int|false $perPage = null,                 // Items per page (pagination)
+null|false|int $limitPagination = null,         // Maximum items per page limit
+array $with = [],                               // Relations to eager load
+array $withCount = []                           // Relations to count
+): \Illuminate\Support\Collection|\Illuminate\Pagination\LengthAwarePaginator;
 
 ```
 Search with Operators:
@@ -198,9 +227,15 @@ Search with Operators:
 $searchColumns = [
 ['column' => 'title', 'operator' => 'LIKE'],
 ['column' => 'category', 'operator' => '='],
-'status' // Simple column search (default '=')
+'status' // Simple column search (default 'LIKE')
 ];
 ```
+
+Once you're done with a shared/injected instance, `resetOnly()`, `resetWith()`, `resetWithCount()`,
+`resetSearch()`, `resetOrdering()`, `resetPagination()` and `reset()` clear the fluent state so it can
+be reused for a different query. `forgetColumnsCache($model)` and `forgetAllColumnsCache()` clear the
+cached column listing used to validate `orderBy()` input (this is also flushed automatically after
+migrations run).
 
 ### HTTP Response Helper
 
