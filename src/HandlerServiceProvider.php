@@ -28,7 +28,7 @@ class HandlerServiceProvider extends ServiceProvider
     private function bootMigrationCacheFlush(): void
     {
         Event::listen(MigrationsEnded::class, function () {
-            FetchDataService::forgetAllColumnsCache();
+            $this->app->make(FetchDataContract::class)->forgetAllColumnsCache();
         });
     }
 
