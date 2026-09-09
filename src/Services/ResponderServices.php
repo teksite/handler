@@ -9,47 +9,47 @@ use Teksite\Handler\Enums\ResponseType;
 
 class ResponderServices
 {
-    private ?string $title = null;
-    private array $message = [];
-    private array $error = [];
-    private ?ResponseType $type = null;
-    private int $statusCode = 200;
-    private mixed $data = null;
-    private ?string $url = null;
+    private ?string       $title      = null;
+    private array         $message    = [];
+    private array         $error      = [];
+    private ?ResponseType $type       = null;
+    private int           $statusCode = 200;
+    private mixed         $data       = null;
+    private ?string       $url        = null;
 
-    public function setTitle(?string $title): void
+    public function setTitle(?string $title,): void
     {
         $this->title = $title;
     }
 
-    public function setMessage(null|array|string $message): void
+    public function setMessage(null|array|string $message,): void
     {
         if ($message === null || $message === '' || $message === []) return;
 
         $this->message = array_values(array_filter(
             array_merge($this->message, (array)$message),
-            static fn($value) => $value !== null && $value !== ''
+            static fn($value,) => $value !== null && $value !== '',
         ));
     }
 
-    public function setType(ResponseType $type): void
+    public function setType(ResponseType $type,): void
     {
         $this->type = $type;
     }
 
-    public function setStatusCode(?int $statusCode): void
+    public function setStatusCode(?int $statusCode,): void
     {
         if ($statusCode !== null) $this->statusCode = $statusCode;
     }
 
-    public function setError(null|array|string $error): void
+    public function setError(null|array|string $error,): void
     {
         if ($error === null || $error === '' || $error === []) return;
         $this->error = array_merge($this->error, (array)$error);
     }
 
 
-    public function setData(mixed $data): void
+    public function setData(mixed $data,): void
     {
         if ($data === null || $data === [] || $data === '') return;
 
@@ -62,7 +62,7 @@ class ResponderServices
         }
     }
 
-    public function setUrl(?string $url): void
+    public function setUrl(?string $url,): void
     {
         $this->url = $url;
     }
@@ -81,7 +81,7 @@ class ResponderServices
             'error'      => $this->error ?: null,
             'statusCode' => $this->statusCode,
             'data'       => $this->data,
-        ], fn($value) => $value !== null);
+        ], fn($value,) => $value !== null);
     }
 
     public function redirecting(): Redirector|RedirectResponse

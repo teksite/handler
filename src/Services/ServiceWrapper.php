@@ -5,7 +5,7 @@ namespace Teksite\Handler\Services;
 use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Teksite\Handler\Contracts\ServiceResult as ServiceResultContract;
+use Teksite\Handler\Contracts\ServiceResultContract;
 use UnexpectedValueException;
 
 /**

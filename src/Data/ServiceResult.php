@@ -2,16 +2,16 @@
 
 namespace Teksite\Handler\Data;
 
-use Teksite\Handler\Contracts\ServiceResult as contract;
+use Teksite\Handler\Contracts\ServiceResultContract;
 
-final readonly class ServiceResult implements contract
+final readonly class ServiceResult implements ServiceResultContract
 {
     /**
-     * @param bool $success
-     * @param mixed $result
+     * @param bool              $success
+     * @param mixed             $result
      * @param string|array|null $errors
-     * @param int|null $successStatus
-     * @param int|null $failedStatus
+     * @param int|null          $successStatus
+     * @param int|null          $failedStatus
      */
     public function __construct(
         public bool              $success,

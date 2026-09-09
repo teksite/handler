@@ -4,7 +4,7 @@ namespace Teksite\Handler\Tests\Unit\Data;
 
 use Error;
 use PHPUnit\Framework\Attributes\Test;
-use Teksite\Handler\Contracts\ServiceResult as ServiceResultContract;
+use Teksite\Handler\Contracts\ServiceResultContract as ServiceResultContract;
 use Teksite\Handler\Data\ServiceResult;
 use Teksite\Handler\Tests\TestCase;
 

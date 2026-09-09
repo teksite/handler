@@ -85,7 +85,7 @@ class FetchDataService implements FetchDataContract
      */
     private int|false|null $paginationLimit = null;
 
-    public function __construct(private readonly Request $request) {}
+    public function __construct(private readonly Request $request,) {}
 
     /*
     |--------------------------------------------------------------------------
@@ -102,7 +102,7 @@ class FetchDataService implements FetchDataContract
      * ->only(['id', 'name'])
      * ->only(fn () => ['id', 'name'])
      */
-    public function only(array|string|Closure $columns): static
+    public function only(array|string|Closure $columns,): static
     {
         $columns = $this->resolveClosure($columns);
 
@@ -138,7 +138,7 @@ class FetchDataService implements FetchDataContract
      *         $query->latest(),
      * ])
      */
-    public function with(array|string|Closure $relations): static
+    public function with(array|string|Closure $relations,): static
     {
         $relations = $this->resolveClosure($relations);
 
@@ -167,7 +167,7 @@ class FetchDataService implements FetchDataContract
      *         $query->where('published', true),
      * ])
      */
-    public function withCount(array|string|Closure $relations): static
+    public function withCount(array|string|Closure $relations,): static
     {
         $relations = $this->resolveClosure($relations);
 
@@ -196,7 +196,7 @@ class FetchDataService implements FetchDataContract
      *     ['email', 'LIKE'],
      * ])
      */
-    public function search(array|string|Closure $columns): static
+    public function search(array|string|Closure $columns,): static
     {
         $columns = $this->resolveClosure($columns);
 
@@ -217,7 +217,7 @@ class FetchDataService implements FetchDataContract
      * ->orderBy('created_at')
      * ->orderBy(fn () => 'created_at')
      */
-    public function orderBy(string|Closure $column): static
+    public function orderBy(string|Closure $column,): static
     {
         $column = $this->resolveClosure($column);
 
@@ -240,7 +240,7 @@ class FetchDataService implements FetchDataContract
      * ->sort('asc')
      * ->sort(fn () => 'desc')
      */
-    public function sort(string|Closure $direction): static
+    public function sort(string|Closure $direction,): static
     {
         $direction = $this->resolveClosure($direction);
 
@@ -262,7 +262,7 @@ class FetchDataService implements FetchDataContract
      * ->perPage(false)
      * ->perPage(fn () => 20)
      */
-    public function perPage(int|false|Closure $perPage): static
+    public function perPage(int|false|Closure $perPage,): static
     {
         $perPage = $this->resolveClosure($perPage);
 
@@ -284,7 +284,7 @@ class FetchDataService implements FetchDataContract
      * ->limitPagination(false)
      * ->limitPagination(fn () => 100)
      */
-    public function limitPagination(int|false|Closure $limit): static
+    public function limitPagination(int|false|Closure $limit,): static
     {
         $limit = $this->resolveClosure($limit);
 
@@ -381,7 +381,7 @@ class FetchDataService implements FetchDataContract
         int|false|null                        $perPage = null,
         int|false|null                        $limitPagination = null,
         array                                 $with = [],
-        array                                 $withCount = []
+        array                                 $withCount = [],
     ): Collection|LengthAwarePaginator
     {
         $query = $this->resolveQuery($model);
@@ -407,7 +407,7 @@ class FetchDataService implements FetchDataContract
         return $this->applyPagination(
             $query,
             $this->resolvePerPage($perPage),
-            $this->resolveLimitPagination($limitPagination)
+            $this->resolveLimitPagination($limitPagination),
         );
     }
 
@@ -421,7 +421,7 @@ class FetchDataService implements FetchDataContract
      * Resolve fluent configuration Closures, e.g. ->only(fn () => ['id']).
      * The service instance is passed in, so ->only(fn ($fetch) => [...]) also works.
      */
-    private function resolveClosure(mixed $value): mixed
+    private function resolveClosure(mixed $value,): mixed
     {
         return $value instanceof Closure ? $value($this) : $value;
     }
@@ -432,7 +432,7 @@ class FetchDataService implements FetchDataContract
     |--------------------------------------------------------------------------
     */
 
-    private function resolveQuery(string|Model|Builder|Relation|Closure $model): Builder
+    private function resolveQuery(string|Model|Builder|Relation|Closure $model,): Builder
     {
         return match (true) {
             $model instanceof Closure  => $model(),
@@ -448,21 +448,21 @@ class FetchDataService implements FetchDataContract
             default                    => throw new InvalidArgumentException(
                 sprintf(
                     'Expected a Model class, Model instance, Builder, Relation or Closure; %s given.',
-                    get_debug_type($model)
-                )
+                    get_debug_type($model),
+                ),
             ),
         };
     }
 
-    private function newModelQuery(string $modelClass): Builder
+    private function newModelQuery(string $modelClass,): Builder
     {
         if (!is_a($modelClass, Model::class, true)) {
             throw new InvalidArgumentException(
                 sprintf(
                     'The given class [%s] must extend [%s].',
                     $modelClass,
-                    Model::class
-                )
+                    Model::class,
+                ),
             );
         }
 
@@ -475,7 +475,7 @@ class FetchDataService implements FetchDataContract
     |--------------------------------------------------------------------------
     */
 
-    private function applyEagerLoading(Builder $query, array $relations): void
+    private function applyEagerLoading(Builder $query, array $relations,): void
     {
         if ($relations !== []) $query->with($relations);
     }
@@ -486,7 +486,7 @@ class FetchDataService implements FetchDataContract
     |--------------------------------------------------------------------------
     */
 
-    private function applySelection(Builder $query, array $only, array $with = []): void
+    private function applySelection(Builder $query, array $only, array $with = [],): void
     {
         if ($only === [] || in_array('*', $only, true)) return;
 
@@ -509,7 +509,7 @@ class FetchDataService implements FetchDataContract
      * This is intentionally conservative. If a relation cannot safely
      * be resolved, no additional column is injected.
      */
-    private function addRelationKeys(Model $model, array &$columns, array $relations): void
+    private function addRelationKeys(Model $model, array &$columns, array $relations,): void
     {
         foreach ($relations as $relationDefinition) {
             if (!is_string($relationDefinition)) continue;
@@ -545,7 +545,7 @@ class FetchDataService implements FetchDataContract
                         [
                             'relation' => $relationName,
                             'error'    => $e->getMessage(),
-                        ]
+                        ],
                     );
 
                     break;
@@ -560,7 +560,7 @@ class FetchDataService implements FetchDataContract
     |--------------------------------------------------------------------------
     */
 
-    private function applySearch(Builder $query, array $searchColumns): Builder
+    private function applySearch(Builder $query, array $searchColumns,): Builder
     {
         $searchInput = config('handler.search_input_field', 's');
 
@@ -570,7 +570,7 @@ class FetchDataService implements FetchDataContract
 
         $keyword = mb_substr($keyword, 0, self::MAX_SEARCH_KEYWORD_LENGTH);
 
-        return $query->where(function (Builder $q) use ($searchColumns, $keyword) {
+        return $query->where(function (Builder $q,) use ($searchColumns, $keyword) {
             $hasCondition = false;
 
             foreach ($searchColumns as $definition) {
@@ -594,7 +594,7 @@ class FetchDataService implements FetchDataContract
 
                     $method = $hasCondition ? 'orWhereHas' : 'whereHas';
 
-                    $q->{$method}($relation, fn(Builder $rq) => $rq->where($field, $operator, $value));
+                    $q->{$method}($relation, fn(Builder $rq,) => $rq->where($field, $operator, $value));
 
                     $hasCondition = true;
 
@@ -616,7 +616,7 @@ class FetchDataService implements FetchDataContract
         });
     }
 
-    private function parseSearchCondition(string|array $definition, string $keyword): ?array
+    private function parseSearchCondition(string|array $definition, string $keyword,): ?array
     {
         $valueProvided = false;
 
@@ -672,7 +672,7 @@ class FetchDataService implements FetchDataContract
         ];
     }
 
-    private function extractRelationName(string $path): string
+    private function extractRelationName(string $path,): string
     {
         $parts = explode('.', $path);
 
@@ -681,7 +681,7 @@ class FetchDataService implements FetchDataContract
         return implode('.', $parts);
     }
 
-    private function extractColumnName(string $path): string
+    private function extractColumnName(string $path,): string
     {
         return (string)last(explode('.', $path));
     }
@@ -692,7 +692,7 @@ class FetchDataService implements FetchDataContract
     |--------------------------------------------------------------------------
     */
 
-    private function applyOrdering(Builder $query): Builder
+    private function applyOrdering(Builder $query,): Builder
     {
         $defaultOrderBy = config('handler.default_order_by', 'created_at');
 
@@ -736,14 +736,14 @@ class FetchDataService implements FetchDataContract
     |--------------------------------------------------------------------------
     */
 
-    private function stringInput(string $key, string $default): string
+    private function stringInput(string $key, string $default,): string
     {
         $value = $this->request->input($key, $default);
 
         return is_string($value) ? $value : $default;
     }
 
-    private function resolvePerPage(null|int|false $perPage): int|false
+    private function resolvePerPage(null|int|false $perPage,): int|false
     {
         /*
          * Fluent value has priority.
@@ -770,7 +770,7 @@ class FetchDataService implements FetchDataContract
         return (int)config('handler.pagination', 25);
     }
 
-    private function resolveLimitPagination(null|false|int $limitPagination): int|false
+    private function resolveLimitPagination(null|false|int $limitPagination,): int|false
     {
         /*
          * Fluent value has priority.
@@ -785,7 +785,7 @@ class FetchDataService implements FetchDataContract
         return (int)config('handler.limit-pagination', 250);
     }
 
-    private function applyPagination(Builder $query, int|false $perPage, int|false $limitPagination): LengthAwarePaginator|Collection
+    private function applyPagination(Builder $query, int|false $perPage, int|false $limitPagination,): LengthAwarePaginator|Collection
     {
         /*
          * Pagination disabled.
@@ -815,7 +815,7 @@ class FetchDataService implements FetchDataContract
      *
      * @return array<int, string|array>
      */
-    private function normalizeColumns(array|string|null $columns): array
+    private function normalizeColumns(array|string|null $columns,): array
     {
         if ($columns === null) return [];
 
@@ -850,7 +850,7 @@ class FetchDataService implements FetchDataContract
      *     'posts' => fn (Builder $query) => ...,
      * ]
      */
-    private function normalizeRelations(array|string|null $relations): array
+    private function normalizeRelations(array|string|null $relations,): array
     {
         if ($relations === null) return [];
 
@@ -893,7 +893,7 @@ class FetchDataService implements FetchDataContract
      * Associative constrained relations override previous
      * definitions for the same relation.
      */
-    private function mergeRelations(array $first, array $second): array
+    private function mergeRelations(array $first, array $second,): array
     {
         $result = [];
 
@@ -930,14 +930,14 @@ class FetchDataService implements FetchDataContract
         }
 
         return array_values(
-                array_filter($result, static fn($value) => is_string($value) || is_array($value) || $value instanceof Closure))
-            + array_filter($result, static fn($value, $key) => is_string($key) && !is_int($key), ARRAY_FILTER_USE_BOTH);
+                array_filter($result, static fn($value,) => is_string($value) || is_array($value) || $value instanceof Closure))
+            + array_filter($result, static fn($value, $key,) => is_string($key) && !is_int($key), ARRAY_FILTER_USE_BOTH);
     }
 
     /**
      * Make unique columns while preserving search definitions.
      */
-    private function uniqueColumns(array $columns): array
+    private function uniqueColumns(array $columns,): array
     {
         $result = [];
 
@@ -961,7 +961,7 @@ class FetchDataService implements FetchDataContract
     /**
      * Merge select columns.
      */
-    private function mergeColumns(array $fluentColumns, array $getColumns): array
+    private function mergeColumns(array $fluentColumns, array $getColumns,): array
     {
         if (in_array('*', $fluentColumns, true) || in_array('*', $getColumns, true)) return ['*'];
 

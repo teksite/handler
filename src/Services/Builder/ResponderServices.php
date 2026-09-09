@@ -19,50 +19,50 @@ class ResponderServices
         $this->responder = new ResponsePayload();
     }
 
-    public function title(?string $title = null): static
+    public function title(?string $title = null,): static
     {
         $this->responder->setTitle($title);
         return $this;
     }
 
-    public function message(null|string|array $message): static
+    public function message(null|string|array $message,): static
     {
         $this->responder->setMessage($message);
         return $this;
     }
 
-    public function type(ResponseType $type): static
+    public function type(ResponseType $type,): static
     {
         $this->responder->setType($type);
         return $this;
     }
 
-    public function error(null|string|array $error = null): static
+    public function error(null|string|array $error = null,): static
     {
         $this->responder->setError($error);
         return $this;
     }
 
-    public function statusCode(?int $statusCode = null): static
+    public function statusCode(?int $statusCode = null,): static
     {
         $this->responder->setStatusCode($statusCode);
         return $this;
     }
 
-    public function data(mixed $data): static
+    public function data(mixed $data,): static
     {
         $this->responder->setData($data);
         return $this;
     }
 
-    public function route(?string $route, mixed $parameters = []): static
+    public function route(?string $route, mixed $parameters = [],): static
     {
         if ($route) $this->responder->setUrl(route($route, $parameters));
 
         return $this;
     }
 
-    public function url(?string $url): static
+    public function url(?string $url,): static
     {
         if ($url) $this->responder->setUrl($url);
         return $this;
@@ -71,7 +71,7 @@ class ResponderServices
 
     /** ===== Output Methods ===== */
 
-    public function go(null|string $url = null): Redirector|RedirectResponse
+    public function go(null|string $url = null,): Redirector|RedirectResponse
     {
         if ($url) $this->responder->setUrl($url);
         return $this->responder->redirecting();
@@ -85,27 +85,27 @@ class ResponderServices
 
     /** ===== Helpers ===== */
 
-    public function success(string|array $message = 'success', mixed $data = null, int $status = 200): static
+    public function success(string|array $message = 'success', mixed $data = null, int $status = 200,): static
     {
         return $this->buildResponse(ResponseType::SUCCESS,
-            $message,
-            $data,
-            $status
+                                    $message,
+                                    $data,
+                                    $status,
         );
 
     }
 
-    public function failed(string|array $message = 'failed', string|array $errors = [], int $status = 403, mixed $data = []): static
+    public function failed(string|array $message = 'failed', string|array $errors = [], int $status = 403, mixed $data = [],): static
     {
         return $this->buildResponse(ResponseType::FAILED,
-            $message,
-            $data,
-            $status,
-            $errors);
+                                    $message,
+                                    $data,
+                                    $status,
+                                    $errors);
     }
 
 
-    private function buildResponse(ResponseType $type, string|array $message, mixed $data = null, int $status = 200, array $error = []): static
+    private function buildResponse(ResponseType $type, string|array $message, mixed $data = null, int $status = 200, array $error = [],): static
     {
         return $this->type($type)
                     ->statusCode($status)
@@ -122,7 +122,7 @@ class ResponderServices
         null|string|array $failed_message = null,
         ?string           $success_url = null,
         ?string           $failed_url = null,
-        bool              $autoReply = false
+        bool              $autoReply = false,
     ): static|JsonResponse|Redirector|RedirectResponse
     {
         {
@@ -135,8 +135,8 @@ class ResponderServices
 
             } else {
                 $this->failed($failed_message ?? __('something went wrong'),
-                    $result->errors ?? ['server' => __('something went wrong')],
-                    $result->failedStatus ?? 500);
+                              $result->errors ?? ['server' => __('something went wrong')],
+                              $result->failedStatus ?? 500);
                 if ($failed_url) $this->url($failed_url);
             }
 
