@@ -1,0 +1,17 @@
+/vendor/
+/node_modules/
+.idea/
+.vscode/
+.nova/
+.phpactor.json
+.phpunit.result.cache
+.phpunit.cache/
+.phpunit.cache
+/.phpunit.cache/
+.DS_Store
+Thumbs.db
+composer.phar
+*.iml
+/.codex/
+/.cursor/
+/_ide_helper.php
