@@ -112,7 +112,7 @@ class ServiceWrapper
             $result = $this->executeWithTransaction();
 
             if ($dispatchSuccessEvent) {
-                $this->dispatchEvent(config('handler.success_event_class'), array_merge(['result' => $result], $eventData));
+                $this->dispatchEvent(config('handler.success_event_class'), array_merge(['result' => $result, 'data' => $eventData]));
             }
             return $this->wrapResult($result, true);
 
@@ -121,7 +121,7 @@ class ServiceWrapper
             if (config('handler.log', false)) Log::error('Service execution failed.', ['exception' => $e]);
 
             if ($dispatchFailureEvent) {
-                $this->dispatchEvent(config('handler.failure_event_class'), array_merge(['exception' => $e], $eventData));
+                $this->dispatchEvent(config('handler.failure_event_class'), array_merge(['exception' => $e]));
             }
 
             if ($this->onFailure) {
