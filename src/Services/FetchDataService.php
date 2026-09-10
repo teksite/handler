@@ -893,32 +893,27 @@ class FetchDataService implements FetchDataContract
      * Associative constrained relations override previous
      * definitions for the same relation.
      */
-    private function mergeRelations(array $first, array $second,): array
+    private function mergeRelations(array $first, array $second): array
     {
         $result = [];
 
-        /*
-         * First pass: numeric relations.
-         */
         foreach ([$first, $second] as $relations) {
             foreach ($relations as $key => $value) {
-                if (!is_int($key)) continue;
 
-                if (!is_string($value)) continue;
+                // Normal relation:
+                if (is_int($key)) {
+                    if (!is_string($value))  continue;
 
-                $value = trim($value);
+                    $value = trim($value);
 
-                if ($value === '') continue;
+                    if ($value === '') continue;
 
-                $result[$value] = $value;
-            }
-        }
+                    $result[$value] = true;
 
-        /*
-         * Second pass: associative constrained relations.
-         */
-        foreach ([$first, $second] as $relations) {
-            foreach ($relations as $key => $value) {
+                    continue;
+                }
+
+                // Constrained relation:
                 if (!is_string($key)) continue;
 
                 $key = trim($key);
@@ -929,9 +924,20 @@ class FetchDataService implements FetchDataContract
             }
         }
 
-        return array_values(
-                array_filter($result, static fn($value,) => is_string($value) || is_array($value) || $value instanceof Closure))
-            + array_filter($result, static fn($value, $key,) => is_string($key) && !is_int($key), ARRAY_FILTER_USE_BOTH);
+        $relations = [];
+
+        foreach ($result as $key => $value) {
+            // Normal relation
+            if ($value === true) {
+                $relations[] = $key;
+                continue;
+            }
+
+            // Constrained relation
+            $relations[$key] = $value;
+        }
+
+        return $relations;
     }
 
     /**
