@@ -2,21 +2,17 @@
 
 namespace Teksite\Handler\Events;
 
-use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Teksite\Handler\Contracts\SuccessEventContract;
 
-class OnSuccessEvent
+class OnSuccessEvent implements SuccessEventContract
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use Dispatchable, SerializesModels;
 
     /**
-     * Create a new event instance.
+     * @param array<string, mixed> $data
      */
-    public function __construct(
-        public readonly mixed $result,
-        public readonly array $data = [],
-    ) {}
-
+    public function __construct(public readonly mixed $result, public readonly array $data = [],) {}
 
 }
