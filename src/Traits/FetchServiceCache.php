@@ -46,19 +46,6 @@ trait FetchServiceCache
         return $columns;
     }
 
-    private function registerCacheKey(string $key): void
-    {
-        $registry = Cache::get(self::COLUMNS_REGISTRY_KEY, []);
-
-        if (!is_array($registry)) $registry = [];
-
-        if (!in_array($key, $registry, true)) {
-            $registry[] = $key;
-
-            Cache::forever(self::COLUMNS_REGISTRY_KEY, $registry);
-        }
-    }
-
     public function forgetAllColumnsCache(): void
     {
         Cache::forever(self::COLUMNS_VERSION_KEY, Str::random(12));
