@@ -21,4 +21,41 @@ interface FetchDataContract
         array                                 $with = [],
         array                                 $withCount = []
     ): Collection|LengthAwarePaginator;
+
+
+    public function only(array|string|Closure $columns): static;
+
+    public function with(array|string|Closure $relations): static;
+
+    public function withCount(array|string|Closure $relations): static;
+
+    public function search(array|string|Closure $columns): static;
+
+    public function orderBy(string|Closure $column): static;
+
+    public function sort(string|Closure $direction): static;
+
+    public function perPage(int|false|Closure $perPage): static;
+
+    public function limitPagination(int|false|Closure $limit): static;
+
+    public function resetOnly(): static;
+
+    public function resetWith(): static;
+
+    public function resetWithCount(): static;
+
+    public function resetSearch(): static;
+
+    public function resetOrdering(): static;
+
+    public function resetPagination(): static;
+
+    public function reset(): static;
+
+    public function forgetColumnsCache(string|Model $model): void;
+
+    public function forgetAllColumnsCache(): void;
+
+
 }
