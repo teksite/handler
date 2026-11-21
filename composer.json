@@ -16,8 +16,6 @@
         "response-builder",
         "data-fetcher"
     ],
-    "minimum-stability": "dev",
-    "prefer-stable": true,
     "license": "MIT",
     "autoload": {
         "psr-4": {
@@ -26,7 +24,7 @@
     },
     "require": {
         "php": "^8.3",
-        "laravel/framework": "^13"
+        "laravel/framework": "^12|^13"
     },
     "require-dev": {
         "orchestra/testbench": "^11.0",
