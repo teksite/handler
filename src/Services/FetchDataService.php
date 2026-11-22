@@ -42,6 +42,7 @@ class FetchDataService implements FetchDataContract
 
     /**
      * @var array<int, string>
+     *
      * Columns selected through only().
      */
     private array $onlyColumns = [];
@@ -50,11 +51,6 @@ class FetchDataService implements FetchDataContract
      * @var array<int|string, mixed>
      *
      * Eager loaded relations, constrained ones keyed by name.
-     * Supports:
-     *  [
-     *      'profile',
-     *      'posts' => fn (Builder $query) => ...,
-     *  ]
      */
     private array $withRelations = [];
 
@@ -96,6 +92,7 @@ class FetchDataService implements FetchDataContract
      * Fluent pagination limit.
      *
      * null: use get() argument / config.
+     *
      * false: unlimited.
      */
     private int|false|null $paginationLimit = null;
@@ -143,9 +140,6 @@ class FetchDataService implements FetchDataContract
 
         if ($relations !== []) $this->withRelations = $this->mergeRelations($this->withRelations, $relations);
 
-
-        $this->withRelations = $this->mergeRelations($this->withRelations, $relations);
-
         return $this;
     }
 
@@ -164,6 +158,7 @@ class FetchDataService implements FetchDataContract
     /**
      * Add search columns: ->search('name,email'), ->search(['name', 'user.name']),
      * ->search([['email', 'LIKE'], ['column' => 'status', 'operator' => '=']]).
+     *
      * A dotted column ("user.name") searches through the relation.
      */
     public function search(array|string|Closure $columns): static
@@ -196,7 +191,7 @@ class FetchDataService implements FetchDataContract
     /**
      * Set sorting direction.
      *
-     * Supports: >sort('asc'), ->sort(fn () => 'desc')
+     * Supports: ->sort('asc'), ->sort(fn () => 'desc')
      */
     public function sort(string|Closure $direction): static
     {
@@ -216,10 +211,7 @@ class FetchDataService implements FetchDataContract
      */
     public function perPage(int|false|Closure $perPage): static
     {
-
-        $perPage = $this->resolveClosure($perPage);
-
-        $this->perPageValue = $this->assertPositiveIntOrFalse($perPage, 'perPage');
+        $this->perPageValue = $this->assertPositiveIntOrFalse($this->resolveClosure($perPage), 'perPage');
 
         return $this;
     }
@@ -229,9 +221,7 @@ class FetchDataService implements FetchDataContract
      */
     public function limitPagination(int|false|Closure $limit): static
     {
-        $limit = $this->resolveClosure($limit);
-
-        $this->paginationLimit = $this->assertPositiveIntOrFalse($limit, 'limitPagination');
+        $this->paginationLimit = $this->assertPositiveIntOrFalse($this->resolveClosure($limit), 'limitPagination');
 
         return $this;
     }
@@ -309,7 +299,7 @@ class FetchDataService implements FetchDataContract
      * Build and run the query, combining the fluent configuration with the
      * arguments given here (fluent values win), and return the records.
      *
-     * @throws InvalidArgumentException
+     * @throws InvalidArgumentException|JsonException
      */
     public function get(
         string|Model|Builder|Relation|Closure $model,
@@ -370,16 +360,17 @@ class FetchDataService implements FetchDataContract
     private function resolveQuery(string|Model|Builder|Relation|Closure $model): Builder
     {
         if ($model instanceof Closure) {
-            $query = $model();
+            $resolved = $model();
 
-            if (!$query instanceof Builder) {
+            if (!is_string($resolved) && !$resolved instanceof Model && !$resolved instanceof Builder
+                && !$resolved instanceof Relation && !$resolved instanceof Closure) {
                 throw new InvalidArgumentException(sprintf(
-                    'The query Closure must return an  \Illuminate\Database\Eloquent\Builder; %s returned.',
-                    get_debug_type($query),
+                    'The query Closure must return a model class, Builder or Relation; %s returned.',
+                    get_debug_type($resolved),
                 ));
             }
 
-            return $query;
+            return $this->resolveQuery($resolved);
         }
 
 
@@ -394,13 +385,7 @@ class FetchDataService implements FetchDataContract
     private function newModelQuery(string $modelClass): Builder
     {
         if (!is_a($modelClass, Model::class, true)) {
-            throw new InvalidArgumentException(
-                sprintf(
-                    'The given class [%s] must extend [%s].',
-                    $modelClass,
-                    Model::class,
-                ),
-            );
+            throw new InvalidArgumentException(sprintf('The given class [%s] must extend [%s].', $modelClass, Model::class),);
         }
 
         return (new $modelClass)->newQuery();
@@ -416,12 +401,15 @@ class FetchDataService implements FetchDataContract
     /**
      * @param array<int, string|array<int|string, mixed>> $only
      * @param array<int|string, mixed>                    $relations
+     * @throws JsonException
      */
     private function applySelection(Builder $query, array $only, array $relations): void
     {
         if ($only === [] || in_array('*', $only, true)) return;
 
         $model = $query->getModel();
+
+        $only[] = $model->getKeyName();
 
         array_push($only, ...$this->relationKeyColumns($model, $relations));
 
@@ -448,13 +436,10 @@ class FetchDataService implements FetchDataContract
 
             $name = explode('.', explode(':', $definition, 2)[0], 2)[0];
 
-            // Skipping the base Model methods keeps names such as "delete" from ever being called.
-            if ($name === '' || method_exists(Model::class, $name) || !method_exists($model, $name)) {
-                continue;
-            }
+            if ($name === '' || method_exists(Model::class, $name) || !method_exists($model, $name)) continue;
 
             try {
-                $relation = Relation::noConstraints(static fn() => $model->{$name}());
+                $relation = Relation::noConstraints(fn() => $model->{$name}());
             } catch (Throwable) {
                 continue;
             }
@@ -481,7 +466,6 @@ class FetchDataService implements FetchDataContract
         };
     }
 
-
     /*
     |--------------------------------------------------------------------------
     | Search
@@ -490,15 +474,15 @@ class FetchDataService implements FetchDataContract
 
     private function applySearch(Builder $query, array $searchColumns): Builder
     {
-
         $searchInput = (string)config('handler.search_input_field', 's');
         $keyword = trim($this->stringInput($searchInput, ''));
 
         if ($keyword === '') return $query;
 
-        $driver = $query->getQuery()->getConnection()->getDriverName();
+        $charLimit = (int)config('handler.search_input_field_length', self::MAX_SEARCH_KEYWORD_LENGTH);
+        $keyword = mb_substr($keyword, 0, min($charLimit, 1000));
 
-        $keyword = mb_substr($keyword, 0, self::MAX_SEARCH_KEYWORD_LENGTH);
+        $driver = $query->getQuery()->getConnection()->getDriverName();
 
         $local = [];
         $related = [];
@@ -589,7 +573,6 @@ class FetchDataService implements FetchDataContract
             $value = (string)$value;
 
             if ($valueProvided) {
-                // Explicit values are intentional, wildcards included.
                 if (!str_contains($value, '%')) {
                     $value = "%{$value}%";
                 }
@@ -666,7 +649,6 @@ class FetchDataService implements FetchDataContract
 
         $defaultSort = $this->normalizeDirection((string)config('handler.default_sort_direction', 'desc'), 'desc');
 
-        // The fluent API has priority over the request.
         $orderBy = $this->orderColumn ?? $this->stringInput('order', $defaultOrderBy);
 
         $sort = $this->normalizeDirection($this->sortDirection ?? $this->stringInput('sort', $defaultSort), $defaultSort);
@@ -696,7 +678,7 @@ class FetchDataService implements FetchDataContract
         return $query;
     }
 
-    private function normalizeDirection(string $direction, string $fallback = 'desc'): string
+    private function normalizeDirection(string $direction, string $fallback): string
     {
         $direction = strtolower(trim($direction));
 

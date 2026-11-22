@@ -1,4 +1,5 @@
 <?php
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -30,8 +31,7 @@ return [
 
     'default_sort_direction' => 'desc',
 
-    'allow_relation_ordering' => false, // Allow order by relations? (performance consideration)
-
+    'search_input_field_length' => 250,
 
     /*
     |--------------------------------------------------------------------------
@@ -51,7 +51,7 @@ return [
     | log                  => log caught exceptions and event dispatch problems.
     |
     */
-    'wrapper' => env('HANDLER_WRAPPER', true),
+    'wrapper'                   => env('HANDLER_WRAPPER', true),
 
     'transaction' => env('HANDLER_TRANSACTION', true),
 
