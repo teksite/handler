@@ -3,44 +3,73 @@
 namespace Teksite\Handler\Services;
 
 use Closure;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
+use LogicException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Teksite\Handler\Contracts\ServiceResultContract;
+use Teksite\Handler\Contracts\SuccessEventContract;
+use Throwable;
 use UnexpectedValueException;
 
 /**
- * Wraps a service action with optional DB transaction, unified result object,
+ * Wraps a service action with an optional DB transaction, a unified result object,
  * exception logging and success/failure event dispatching.
+ *
+ * When the handler is disabled (`withHandler: false` or `handler.wrapper = false`),
+ * exceptions are no longer caught and bubble up untouched, which is meant for
+ * development and debugging. Transactions, result wrapping and the success event
+ * keep following their own settings.
  */
 class ServiceWrapper
 {
+
+    /**
+     * Exceptions Laravel uses for control flow (validation, authorization, HTTP errors).
+     * They are never swallowed, so the framework can render its regular response.
+     *
+     * @var array<int, class-string<Throwable>>
+     */
+    private const array DONT_CATCH = [
+        ValidationException::class,
+        AuthorizationException::class,
+        AuthenticationException::class,
+        HttpExceptionInterface::class,
+        HttpResponseException::class,
+    ];
+
     private ?Closure $onSuccess = null;
     private ?Closure $onFailure = null;
 
-    /** @var array<string, mixed> */
+    /**
+     * @var array<string, mixed>
+     */
     private array $eventData = [];
 
     /**
-     * @param bool $useTransaction
-     * @param bool $wrapServiceResult
-     * @param bool $useHandler
+     * @param bool        $useTransaction
+     * @param bool        $wrapServiceResult
+     * @param bool        $useHandler
      * @param string|null $connection
      */
     public function __construct(
         private readonly bool $useTransaction = true,
         private readonly bool $wrapServiceResult = true,
         private readonly bool $useHandler = true,
-        private ?string       $connection = null,
-
+        private ?string $connection = null,
     )
     {
         $this->connection = $connection ?? config('handler.connection');
     }
 
     /**
-     * @param bool $hasTransaction
-     * @param bool $wrapServiceResult
-     * @param bool $withHandler
+     * @param bool        $hasTransaction
+     * @param bool        $wrapServiceResult
+     * @param bool        $withHandler
      * @param string|null $connection
      * @return self
      */
@@ -55,26 +84,32 @@ class ServiceWrapper
     }
 
     /**
-     * The action to run on success.
+     * The action to run (inside a transaction when enabled).
      */
     public function do(Closure $closure): self
     {
         $this->onSuccess = $closure;
+
         return $this;
     }
 
     /**
-     * The action to run if the primary action fails.
+     * The fallback to run if the primary action fails with a caught exception.
      */
     public function ifFailed(Closure $closure): self
     {
         $this->onFailure = $closure;
+
         return $this;
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     public function withEventData(array $data = []): self
     {
         $this->eventData = array_merge($this->eventData, $data);
+
         return $this;
     }
 
@@ -85,26 +120,26 @@ class ServiceWrapper
     public function onConnection(?string $connection = null): self
     {
         $this->connection = $connection;
+
         return $this;
     }
 
 
     /**
-     * @param bool $dispatchSuccessEvent
-     * @param bool $dispatchFailureEvent
-     * @param array $additionalEventData
-     * @return mixed
-     * @throws \Throwable
+     * @param array<string, mixed> $additionalEventData
+     *
+     * @throws LogicException           When do() was never called.
+     * @throws UnexpectedValueException When the configured service result class is invalid.
+     * @throws Throwable                When the handler is disabled or the exception is a control-flow one.
      */
-    public function run(
-        bool  $dispatchSuccessEvent = false,
-        bool  $dispatchFailureEvent = false,
-        array $additionalEventData = []
-    ): mixed
+    public function run(bool $dispatchSuccessEvent = false, bool $dispatchFailureEvent = false, array $additionalEventData = [],): mixed
     {
-        if ($this->onSuccess === null) throw new \LogicException("The 'do' closure must be set before calling run.");
+        if ($this->onSuccess === null) throw new LogicException("The 'do' closure must be set before calling run.");
 
-        if (!$this->useHandler) return $this->executeAction($this->onSuccess);
+        if (!$this->useHandler) {
+            $result = $this->executeAction($this->onSuccess);
+            return $this->wrapResult($result, true);
+        }
 
         $eventData = array_merge($this->eventData, $additionalEventData);
 
@@ -112,7 +147,11 @@ class ServiceWrapper
             $result = $this->executeWithTransaction();
 
             if ($dispatchSuccessEvent) {
-                $this->dispatchEvent(config('handler.success_event_class'), array_merge(['result' => $result, 'data' => $eventData]));
+                $this->dispatchEvent(
+                    config('handler.success_event_class'),
+                    SuccessEventContract::class,
+                    [$result, $eventData],
+                );
             }
             return $this->wrapResult($result, true);
 
@@ -154,19 +193,25 @@ class ServiceWrapper
 
     /**
      * Dispatch an event without letting a failure here affect the actual service result.
+     *
+     * An empty class name disables the event. A class that does not exist or does not
+     * implement the expected contract is skipped with a warning.
+     *
+     * @param array<int, mixed> $arguments Positional constructor arguments.
      */
-    private function dispatchEvent(?string $eventClass, array $data): void
+    private function dispatchEvent(mixed $eventClass, string $contract, array $arguments): void
     {
-        if (!$eventClass || !class_exists($eventClass)) return;
+        if (!is_string($eventClass) || $eventClass === '') return;
 
         try {
-            event(app()->make($eventClass, $data));
-        } catch (\Throwable $e) {
-            if (config('handler.log', false)) {
-                Log::error('Failed to dispatch handler event.', [
-                    'event'     => $eventClass,
-                    'exception' => $e,
-                ]);
+            if (!is_a($eventClass, $contract, true)) {
+                Log::warning(sprintf('Handler event class [%s] was skipped: it must exist and implement [%s].', $eventClass, $contract));
+                return;
+            }
+            event(new $eventClass(...$arguments));
+        } catch (Throwable $e) {
+            if (config('handler.log', true)) {
+                Log::error('Failed to dispatch handler event.', ['event' => $eventClass, 'exception' => $e,]);
             }
         }
     }
@@ -177,12 +222,11 @@ class ServiceWrapper
 
         $serviceResultClass = config('handler.service_result_class', \Teksite\Handler\Data\ServiceResult::class);
 
-        if (
-            !is_string($serviceResultClass)
-            || !class_exists($serviceResultClass)
-            || !is_a($serviceResultClass, ServiceResultContract::class, true)
-        ) {
-            throw new UnexpectedValueException("Service result not found or not implement from 'Teksite\Handler\Contracts\ServiceResult'");
+        if (!is_string($serviceResultClass) || !is_a($serviceResultClass, ServiceResultContract::class, true)) {
+            throw new UnexpectedValueException(sprintf(
+                'The configured service result class must implement [%s].',
+                ServiceResultContract::class,
+            ));
         }
 
         return new $serviceResultClass($success, $result);
