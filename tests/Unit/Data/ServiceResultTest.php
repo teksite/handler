@@ -4,7 +4,7 @@ namespace Teksite\Handler\Tests\Unit\Data;
 
 use Error;
 use PHPUnit\Framework\Attributes\Test;
-use Teksite\Handler\Contracts\ServiceResultContract as ServiceResultContract;
+use Teksite\Handler\Contracts\ServiceResultContract;
 use Teksite\Handler\Data\ServiceResult;
 use Teksite\Handler\Tests\TestCase;
 
@@ -54,6 +54,32 @@ class ServiceResultTest extends TestCase
         $result = new ServiceResult(false, null, 'something went wrong');
 
         $this->assertSame('something went wrong', $result->errors);
+    }
+
+    #[Test]
+    public function the_accessors_mirror_a_successful_result(): void
+    {
+        $result = new ServiceResult(true, ['id' => 1], successStatus: 201);
+
+        $this->assertTrue($result->isSuccess());
+        $this->assertFalse($result->isFailed());
+        $this->assertSame(['id' => 1], $result->getResult());
+        $this->assertNull($result->getErrors());
+        $this->assertSame(201, $result->getSuccessStatus());
+        $this->assertNull($result->getFailedStatus());
+    }
+
+    #[Test]
+    public function the_accessors_mirror_a_failed_result(): void
+    {
+        $result = new ServiceResult(false, null, ['field' => 'is required'], failedStatus: 422);
+
+        $this->assertFalse($result->isSuccess());
+        $this->assertTrue($result->isFailed());
+        $this->assertNull($result->getResult());
+        $this->assertSame(['field' => 'is required'], $result->getErrors());
+        $this->assertNull($result->getSuccessStatus());
+        $this->assertSame(422, $result->getFailedStatus());
     }
 
     #[Test]

@@ -18,6 +18,14 @@ use Teksite\Handler\Tests\TestCase;
 
 class FetchDataServiceTest extends TestCase
 {
+
+    private function seedPost(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+        Post::create(['user_id' => $user->id, 'title' => 'Seed']);
+    }
+
+
     private function withQuery(array $query): FetchDataService
     {
         $this->app->instance('request', Request::create('/', 'GET', $query));
@@ -72,6 +80,11 @@ class FetchDataServiceTest extends TestCase
         return '';
     }
 
+    private function columnsCacheKey(string $table): string
+    {
+        return sprintf('fetch-data-columns:%s:testing:%s', Cache::get('fetch-data-columns:__version', '0'), $table);
+    }
+
     #[Test]
     public function get_actually_returns_the_fetched_records_instead_of_the_service_instance(): void
     {
@@ -124,6 +137,80 @@ class FetchDataServiceTest extends TestCase
     }
 
     #[Test]
+    public function only_with_a_belongs_to_relation_selects_the_foreign_key_so_the_relation_loads(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+        Post::create(['user_id' => $user->id, 'title' => 'Hello world']);
+
+        $post = FetchData::only(['title'])->with(['user'])->get(Post::class)->first();
+
+        $this->assertNotNull($post->user);
+        $this->assertSame('Ada', $post->user->name);
+    }
+
+    #[Test]
+    public function only_with_a_has_many_relation_does_not_select_the_child_foreign_key_on_the_parent(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+        Post::create(['user_id' => $user->id, 'title' => 'Hello world']);
+
+        $sql = $this->mainSelect(
+            $this->capturedQueries(function () {
+                FetchData::only(['name'])->with(['posts'])->get(User::class);
+            })
+        );
+
+        $this->assertStringContainsString('select "name", "id" from "users"', $sql);
+        $this->assertStringNotContainsString('"user_id"', $sql);
+
+        $loaded = FetchData::only(['name'])->with(['posts'])->get(User::class)->first();
+
+        $this->assertCount(1, $loaded->posts);
+    }
+
+    #[Test]
+    public function only_with_a_constrained_relation_still_selects_the_needed_key(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+        Post::create(['user_id' => $user->id, 'title' => 'Hello world']);
+
+        $post = FetchData::only(['title'])
+            ->with(['user' => fn ($query) => $query->where('name', 'Ada')])
+            ->get(Post::class)
+            ->first();
+
+        $this->assertNotNull($post->user);
+    }
+
+    #[Test]
+    public function only_with_a_nested_relation_selects_the_key_of_the_first_level(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+        Post::create(['user_id' => $user->id, 'title' => 'Hello world']);
+
+        $post = FetchData::only(['title'])->with(['user.posts'])->get(Post::class)->first();
+
+        $this->assertNotNull($post->user);
+        $this->assertCount(1, $post->user->posts);
+    }
+
+    #[Test]
+    public function a_name_that_is_a_base_model_method_is_never_called_while_resolving_relation_keys(): void
+    {
+        $saving = false;
+
+        Post::saving(function () use (&$saving) {
+            $saving = true;
+        });
+
+        // The table is empty, so Eloquent never eager loads: only the key resolution
+        // of the service could call save() here, and it must not.
+        FetchData::only(['title'])->with(['save'])->get(Post::class);
+
+        $this->assertFalse($saving);
+    }
+
+    #[Test]
     public function search_filters_records_using_a_like_condition_on_the_configured_input(): void
     {
         $user = User::create(['name' => 'Ada']);
@@ -144,6 +231,69 @@ class FetchDataServiceTest extends TestCase
 
         $this->assertSame(1, $result->total());
         $this->assertSame('Laravel tips', $result->first()->title);
+    }
+
+    #[Test]
+    public function search_treats_a_percent_sign_in_the_keyword_literally(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+
+        Post::create(['user_id' => $user->id, 'title' => 'Sale 50% off']);
+        Post::create(['user_id' => $user->id, 'title' => 'Sale 500 items']);
+
+        $result = $this->withQuery(['s' => '50%'])
+                       ->search(['title'])
+                       ->get(Post::class);
+
+        $this->assertSame(1, $result->total());
+        $this->assertSame('Sale 50% off', $result->first()->title);
+    }
+
+    #[Test]
+    public function search_treats_an_underscore_in_the_keyword_literally(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+
+        Post::create(['user_id' => $user->id, 'title' => 'file_name']);
+        Post::create(['user_id' => $user->id, 'title' => 'fileXname']);
+
+        $result = $this->withQuery(['s' => 'file_name'])
+                       ->search(['title'])
+                       ->get(Post::class);
+
+        $this->assertSame(1, $result->total());
+        $this->assertSame('file_name', $result->first()->title);
+    }
+
+    #[Test]
+    public function search_keeps_wildcards_of_explicit_values_given_by_the_developer(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+
+        Post::create(['user_id' => $user->id, 'title' => 'Laravel tips']);
+        Post::create(['user_id' => $user->id, 'title' => 'Cooking recipes']);
+
+        $result = $this->withQuery(['s' => 'ignored'])
+                       ->search([['column' => 'title', 'operator' => 'LIKE', 'value' => 'Lara%']])
+                       ->get(Post::class);
+
+        $this->assertSame(1, $result->total());
+        $this->assertSame('Laravel tips', $result->first()->title);
+    }
+
+    #[Test]
+    public function search_falls_back_to_like_when_ilike_is_requested_on_a_non_postgres_connection(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+
+        Post::create(['user_id' => $user->id, 'title' => 'Laravel tips']);
+        Post::create(['user_id' => $user->id, 'title' => 'Cooking recipes']);
+
+        $result = $this->withQuery(['s' => 'laravel'])
+                       ->search([['title', 'ILIKE']])
+                       ->get(Post::class);
+
+        $this->assertSame(1, $result->total());
     }
 
     #[Test]
@@ -171,6 +321,52 @@ class FetchDataServiceTest extends TestCase
     }
 
     #[Test]
+    public function search_combines_local_and_relation_columns_with_or(): void
+    {
+        $ada = User::create(['name' => 'Ada Lovelace']);
+        $grace = User::create(['name' => 'Grace Hopper']);
+
+        Post::create(['user_id' => $ada->id, 'title' => 'About Grace']);
+        Post::create(['user_id' => $grace->id, 'title' => 'Compilers']);
+        Post::create(['user_id' => $ada->id, 'title' => 'Engines']);
+
+        $result = $this->withQuery(['s' => 'Grace'])
+                       ->search(['title', 'user.name'])
+                       ->get(Post::class);
+
+        $this->assertSame(2, $result->total());
+    }
+
+    #[Test]
+    public function several_columns_of_the_same_relation_share_a_single_exists_subquery(): void
+    {
+        $this->seedPost();
+
+        $sql = $this->mainSelect(
+            $this->capturedQueries(function () {
+                $this->withQuery(['s' => 'ada'])
+                    ->search(['user.name', 'user.id'])
+                    ->get(Post::class);
+            })
+        );
+
+        $this->assertSame(1, substr_count(strtolower($sql), 'exists'));
+    }
+
+    #[Test]
+    public function a_search_without_any_valid_column_matches_nothing(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+        Post::create(['user_id' => $user->id, 'title' => 'Hello world']);
+
+        $result = $this->withQuery(['s' => 'hello'])
+                       ->search([['', 'LIKE']])
+                       ->get(Post::class);
+
+        $this->assertSame(0, $result->total());
+    }
+
+    #[Test]
     public function order_by_and_sort_can_be_set_fluently(): void
     {
         $user = User::create(['name' => 'Ada']);
@@ -190,6 +386,35 @@ class FetchDataServiceTest extends TestCase
                            ->get(Post::class);
 
         $this->assertSame('Apple', $result->first()->title);
+    }
+
+    #[Test]
+    public function ordering_adds_the_primary_key_as_a_stable_tie_breaker(): void
+    {
+
+        $this->seedPost();
+
+        $sql = $this->mainSelect(
+            $this->capturedQueries(function () {
+                FetchData::orderBy('title')->sort('asc')->get(Post::class);
+            })
+        );
+
+        $this->assertStringContainsString('order by "title" asc, "id" asc', $sql);
+    }
+
+    #[Test]
+    public function the_default_ordering_is_newest_first_with_the_primary_key_as_tie_breaker(): void
+    {
+        $this->seedPost();
+
+        $sql = $this->mainSelect(
+            $this->capturedQueries(function () {
+                FetchData::get(Post::class);
+            })
+        );
+
+        $this->assertStringContainsString('order by "created_at" desc, "id" desc', $sql);
     }
 
     #[Test]
@@ -288,6 +513,42 @@ class FetchDataServiceTest extends TestCase
     }
 
     #[Test]
+    public function a_limit_pagination_of_false_in_the_config_removes_the_cap(): void
+    {
+        config()->set('handler.limit-pagination', false);
+
+        $result = FetchData::perPage(5)->get(Post::class);
+
+        $this->assertSame(5, $result->perPage());
+    }
+
+    #[Test]
+    public function a_non_positive_pagination_value_in_the_config_is_clamped_to_one(): void
+    {
+        config()->set('handler.pagination', 0);
+
+        $result = $this->withQuery([])->get(Post::class);
+
+        $this->assertSame(1, $result->perPage());
+    }
+
+    #[Test]
+    public function a_non_positive_per_page_argument_is_rejected(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        FetchData::get(Post::class, null, null, 0);
+    }
+
+    #[Test]
+    public function a_non_positive_fluent_per_page_is_rejected(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        FetchData::perPage(0);
+    }
+
+    #[Test]
     public function reset_clears_previously_configured_fluent_state(): void
     {
         $service = $this->withQuery([]);
@@ -316,6 +577,28 @@ class FetchDataServiceTest extends TestCase
     }
 
     #[Test]
+    public function the_facade_resolves_a_fresh_instance_for_every_call(): void
+    {
+        $this->assertNotSame(FetchData::getFacadeRoot(), FetchData::getFacadeRoot());
+    }
+
+    #[Test]
+    public function fluent_state_does_not_leak_between_separate_facade_calls(): void
+    {
+        $this->seedPost();
+
+        FetchData::only(['title']);
+
+        $sql = $this->mainSelect(
+            $this->capturedQueries(function () {
+                FetchData::get(Post::class);
+            })
+        );
+
+        $this->assertStringContainsString('select *', $sql);
+    }
+
+    #[Test]
     public function it_throws_for_a_class_that_does_not_extend_eloquent_model(): void
     {
         $this->expectException(InvalidArgumentException::class);
@@ -332,19 +615,52 @@ class FetchDataServiceTest extends TestCase
     }
 
     #[Test]
+    public function it_throws_a_clear_exception_when_the_query_closure_does_not_return_a_builder(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('must return a model class, Model, Builder or Relation');
+
+        FetchData::get(fn () => null);
+    }
+
+    #[Test]
+    public function a_query_closure_may_return_a_model_class_a_model_a_relation_or_another_closure(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+
+        Post::create(['user_id' => $user->id, 'title' => 'One']);
+        Post::create(['user_id' => $user->id, 'title' => 'Two']);
+
+        $this->assertSame(2, FetchData::get(fn () => Post::class)->total());
+        $this->assertSame(2, FetchData::get(fn () => new Post())->total());
+        $this->assertSame(2, FetchData::get(fn () => $user->posts())->total());
+        $this->assertSame(2, FetchData::get(fn () => fn () => Post::query())->total());
+    }
+
+    #[Test]
+    public function a_query_closure_returning_a_builder_is_used_as_the_base_query(): void
+    {
+        $user = User::create(['name' => 'Ada']);
+
+        Post::create(['user_id' => $user->id, 'title' => 'Published', 'status' => 'published']);
+        Post::create(['user_id' => $user->id, 'title' => 'Draft', 'status' => 'draft']);
+
+        $result = FetchData::get(fn () => Post::query()->where('status', 'published'));
+
+        $this->assertSame(1, $result->total());
+        $this->assertSame('Published', $result->first()->title);
+    }
+
+    #[Test]
     public function forget_columns_cache_clears_the_cache_for_a_single_model(): void
     {
         // Trigger a query so the "posts" column listing gets cached.
         FetchData::get(Post::class);
 
-        $this->assertTrue(
-            Cache::has('fetch-data-columns:default:posts')
-        );
+        $this->assertTrue(Cache::has($this->columnsCacheKey('posts')));
 
         FetchData::forgetColumnsCache(Post::class);
 
-        $this->assertFalse(
-            Cache::has('fetch-data-columns:default:posts')
-        );
+        $this->assertFalse(Cache::has($this->columnsCacheKey('posts')));
     }
 }

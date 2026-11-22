@@ -6,7 +6,7 @@
          cacheDirectory=".phpunit.cache"
          beStrictAboutOutputDuringTests="true"
          failOnWarning="true"
-         failOnDeprecation="false">
+         failOnDeprecation="true">
     <testsuites>
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
@@ -16,7 +16,7 @@
         </testsuite>
     </testsuites>
 
-    <source>
+    <source ignoreIndirectDeprecations="true">
         <include>
             <directory suffix=".php">src</directory>
         </include>

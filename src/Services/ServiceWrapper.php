@@ -86,13 +86,12 @@ class ServiceWrapper
 
     public static function withDbTransaction(?bool $wrapServiceResult = null, ?bool $withHandler = null, ?string $connection = null): self
     {
-        return self::make(true, $wrapServiceResult, $connection);
+        return self::make(true, $wrapServiceResult, $withHandler, $connection);
     }
 
     public static function withoutDbTransaction(?bool $wrapServiceResult = null, ?bool $withHandler = null, ?string $connection = null): self
     {
-        return self::make(false, $wrapServiceResult, $connection);
-
+        return self::make(false, $wrapServiceResult, $withHandler, $connection);
     }
 
     /**
@@ -148,10 +147,6 @@ class ServiceWrapper
     {
         if ($this->onSuccess === null) throw new LogicException("The 'do' closure must be set before calling run.");
 
-        if (!$this->useHandler) {
-            $result = $this->executeAction($this->onSuccess);
-            return $this->wrapResult($result, null);
-        }
 
         $eventData = array_merge($this->eventData, $additionalEventData);
 

@@ -365,7 +365,7 @@ class FetchDataService implements FetchDataContract
             if (!is_string($resolved) && !$resolved instanceof Model && !$resolved instanceof Builder
                 && !$resolved instanceof Relation && !$resolved instanceof Closure) {
                 throw new InvalidArgumentException(sprintf(
-                    'The query Closure must return a model class, Builder or Relation; %s returned.',
+                    'The query Closure must return a model class, Model, Builder or Relation; %s returned.',
                     get_debug_type($resolved),
                 ));
             }

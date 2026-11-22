@@ -24,10 +24,11 @@ class ResponseTypeTest extends TestCase
     {
         $this->assertSame(ResponseType::SUCCESS, ResponseType::from('success'));
         $this->assertSame(ResponseType::FAILED, ResponseType::from('failed'));
-        $this->assertSame(ResponseType::Error, ResponseType::from('error'));
+        $this->assertSame(ResponseType::ERROR, ResponseType::from('error'));
         $this->assertSame(ResponseType::WARNING, ResponseType::from('warning'));
         $this->assertSame(ResponseType::INFO, ResponseType::from('info'));
     }
+
 
     #[Test]
     public function resolving_an_unknown_value_throws(): void

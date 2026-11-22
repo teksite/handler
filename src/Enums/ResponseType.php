@@ -9,4 +9,5 @@ enum ResponseType: string
     case ERROR = 'error';
     case WARNING = 'warning';
     case INFO = 'info';
+
 }

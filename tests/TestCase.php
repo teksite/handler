@@ -60,6 +60,10 @@ abstract class TestCase extends Orchestra
             'prefix'   => '',
         ]);
 
+        // The column cache and the flashed reply must never depend on external services.
+        $app['config']->set('cache.default', 'array');
+        $app['config']->set('session.driver', 'array');
+
         // Keep handler defaults small & predictable for assertions.
         $app['config']->set('handler.pagination', 10);
         $app['config']->set('handler.limit-pagination', 50);

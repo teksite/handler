@@ -5,14 +5,23 @@ namespace Teksite\Handler\Tests\Feature;
 use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\ServiceProvider;
 use PHPUnit\Framework\Attributes\Test;
 use Teksite\Handler\Contracts\FetchDataContract;
+use Teksite\Handler\Facade\FetchData;
+use Teksite\Handler\HandlerServiceProvider;
 use Teksite\Handler\Services\Builder\ResponderServices;
 use Teksite\Handler\Services\FetchDataService;
+use Teksite\Handler\Tests\Fixtures\Models\Post;
 use Teksite\Handler\Tests\TestCase;
 
 class HandlerServiceProviderTest extends TestCase
 {
+    private function postsColumnsCacheKey(): string
+    {
+        return sprintf('fetch-data-columns:%s:testing:posts', Cache::get('fetch-data-columns:__version', '0'));
+    }
+
     #[Test]
     public function it_merges_the_package_config_with_the_application_config(): void
     {
@@ -49,15 +58,39 @@ class HandlerServiceProviderTest extends TestCase
     }
 
     #[Test]
+    public function the_package_translations_are_registered_under_the_handler_namespace(): void
+    {
+        $this->assertSame('Successfully done', __('handler::messages.success'));
+        $this->assertSame('Something went wrong', __('handler::messages.failed'));
+    }
+
+    #[Test]
+    public function the_translations_are_publishable_under_the_handler_lang_tag(): void
+    {
+        $paths = ServiceProvider::pathsToPublish(HandlerServiceProvider::class, 'handler-lang');
+
+        $this->assertCount(1, $paths);
+        $this->assertSame(lang_path('vendor/handler'), array_values($paths)[0]);
+    }
+
+    #[Test]
+    public function the_config_is_publishable_under_the_handler_config_tag(): void
+    {
+        $paths = ServiceProvider::pathsToPublish(HandlerServiceProvider::class, 'handler-config');
+
+        $this->assertCount(1, $paths);
+        $this->assertSame(config_path('handler.php'), array_values($paths)[0]);
+    }
+
+    #[Test]
     public function the_column_cache_is_flushed_when_a_migration_batch_finishes(): void
     {
-        Cache::put('fetch-data-columns:default:posts', ['id', 'title'], now()->addDay());
-        Cache::put('fetch-data-columns:__registry', ['fetch-data-columns:default:posts'], now()->addDay());
+        FetchData::get(Post::class);
 
-        $this->assertTrue(Cache::has('fetch-data-columns:default:posts'));
+        $this->assertTrue(Cache::has($this->postsColumnsCacheKey()));
 
         Event::dispatch(new MigrationsEnded('up'));
 
-        $this->assertFalse(Cache::has('fetch-data-columns:default:posts'));
+        $this->assertFalse(Cache::has($this->postsColumnsCacheKey()));
     }
 }
