@@ -25,9 +25,35 @@ class HandlerServiceProvider extends ServiceProvider
     }
 
 
-    private function loadTranslateFiles(): void{
-        $this->loadTranslationsFrom(__DIR__ . '/lang', 'handler');
+    private function loadTranslateFiles(): void
+    {
+        $this->loadTranslationsFrom(__DIR__.'/lang', 'handler');
 
+    }
+
+
+    private function registerConfigFiles(): void
+    {
+        $this->mergeConfigFrom(__DIR__.'/config/handler.php', 'handler');
+    }
+
+    private function registerBindings(): void
+    {
+        $this->app->bind(FetchDataContract::class, FetchDataService::class);
+
+    }
+
+    private function bootPublishFiles(): void
+    {
+        if (!$this->app->runningInConsole()) return;
+
+        $this->publishes([
+            __DIR__.'/config/handler.php' => config_path('handler.php'),
+        ], ['handler', 'handler-config']);
+
+        $this->publishes([
+            __DIR__ . '/lang' => $this->app->langPath('vendor/handler'),
+        ], ['handler', 'handler-lang']);
     }
 
 
@@ -36,25 +62,6 @@ class HandlerServiceProvider extends ServiceProvider
         Event::listen(MigrationsEnded::class, function () {
             $this->app->make(FetchDataContract::class)->forgetAllColumnsCache();
         });
-    }
-
-    private function registerConfigFiles(): void
-    {
-        $this->mergeConfigFrom(__DIR__ . '/config/handler.php', 'handler');
-    }
-
-    private function registerBindings(): void
-    {
-        $this->app->bind(ResponderServices::class, fn () => new ResponderServices());
-        $this->app->bind(FetchDataContract::class, FetchDataService::class);
-
-    }
-
-    private function bootPublishFiles(): void
-    {
-        $this->publishes([
-            __DIR__ . '/config/handler.php' => config_path('handler.php'),
-        ], ['handler', 'handler-config']);
     }
 
 }
