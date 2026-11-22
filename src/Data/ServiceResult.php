@@ -10,7 +10,7 @@ final readonly class ServiceResult implements ServiceResultContract
      * @param string|array<int|string, mixed>|null $errors
      */
     public function __construct(
-        public bool $success,
+        public bool|null $success,
         public mixed $result = null,
         public string|array|null $errors = null,
         public ?int $successStatus = null,
@@ -19,13 +19,19 @@ final readonly class ServiceResult implements ServiceResultContract
 
     public function isSuccess(): bool
     {
-        return $this->success;
+        return $this->success === true;
     }
 
     public function isFailed(): bool
     {
-        return !$this->success;
+        return $this->success ===false;
     }
+
+    public function isUnknown(): bool
+    {
+        return $this->success === null;
+    }
+
 
     public function getResult(): mixed
     {

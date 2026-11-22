@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use LogicException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Teksite\Handler\Contracts\FailureEventContract;
 use Teksite\Handler\Contracts\ServiceResultContract;
 use Teksite\Handler\Contracts\SuccessEventContract;
 use Throwable;
@@ -83,6 +84,17 @@ class ServiceWrapper
         );
     }
 
+    public static function withDbTransaction(?bool $wrapServiceResult = null, ?bool $withHandler = null, ?string $connection = null): self
+    {
+        return self::make(true, $wrapServiceResult, $connection);
+    }
+
+    public static function withoutDbTransaction(?bool $wrapServiceResult = null, ?bool $withHandler = null, ?string $connection = null): self
+    {
+        return self::make(false, $wrapServiceResult, $connection);
+
+    }
+
     /**
      * The action to run (inside a transaction when enabled).
      */
@@ -132,13 +144,13 @@ class ServiceWrapper
      * @throws UnexpectedValueException When the configured service result class is invalid.
      * @throws Throwable                When the handler is disabled or the exception is a control-flow one.
      */
-    public function run(bool $dispatchSuccessEvent = false, bool $dispatchFailureEvent = false, array $additionalEventData = [],): mixed
+    public function run(bool $dispatchSuccessEvent = false, bool $dispatchFailureEvent = false, array $additionalEventData = []): mixed
     {
         if ($this->onSuccess === null) throw new LogicException("The 'do' closure must be set before calling run.");
 
         if (!$this->useHandler) {
             $result = $this->executeAction($this->onSuccess);
-            return $this->wrapResult($result, true);
+            return $this->wrapResult($result, null);
         }
 
         $eventData = array_merge($this->eventData, $additionalEventData);
@@ -146,32 +158,23 @@ class ServiceWrapper
         try {
             $result = $this->executeWithTransaction();
 
-            if ($dispatchSuccessEvent) {
-                $this->dispatchEvent(
-                    config('handler.success_event_class'),
-                    SuccessEventContract::class,
-                    [$result, $eventData],
-                );
-            }
-            return $this->wrapResult($result, true);
+        } catch (Throwable $e) {
+            if (!$this->useHandler || $this->shouldRethrow($e)) throw $e;
 
-        } catch (\Throwable $e) {
-
-            if (config('handler.log', false)) Log::error('Service execution failed.', ['exception' => $e]);
-
-            if ($dispatchFailureEvent) {
-                $this->dispatchEvent(config('handler.failure_event_class'), array_merge(['exception' => $e]));
-            }
-
-            if ($this->onFailure) {
-                $result = $this->executeAction($this->onFailure);
-                return $this->wrapResult($result, false);
-            }
-
-            return $this->wrapResult(null, false);
-
+            return $this->handleFailure($e, $dispatchFailureEvent, $eventData);
         }
+
+        if ($dispatchSuccessEvent) {
+            $this->dispatchEvent(
+                config('handler.success_event_class'),
+                SuccessEventContract::class,
+                [$result, $eventData],
+            );
+        }
+        return $this->wrapResult($result, true);
+
     }
+
 
     /**
      * Runs the success closure, optionally wrapped in a DB transaction on the configured connection.
@@ -180,15 +183,44 @@ class ServiceWrapper
      */
     private function executeWithTransaction(): mixed
     {
-        if (!$this->useTransaction) return $this->executeAction($this->onSuccess);
+        $action = $this->onSuccess;
 
-        return DB::connection($this->connection)->transaction(fn() => $this->executeAction($this->onSuccess));
+        if (!$this->useTransaction) return $this->executeAction($action);
+
+        return DB::connection($this->connection)->transaction(fn() => $this->executeAction($action));
     }
-
 
     private function executeAction(Closure $closure): mixed
     {
         return $closure();
+    }
+
+
+    private function shouldRethrow(Throwable $e): bool
+    {
+        foreach (self::DONT_CATCH as $class) {
+            if ($e instanceof $class) return true;
+        }
+        return false;
+    }
+
+
+    /**
+     * @param array<string, mixed> $eventData
+     */
+    private function handleFailure(Throwable $e, bool $dispatchFailureEvent, array $eventData): mixed
+    {
+        if (config('handler.log', true)) Log::error('Service execution failed.', ['exception' => $e]);
+
+        if ($dispatchFailureEvent) {
+            $this->dispatchEvent(config('handler.failure_event_class'), FailureEventContract::class, [$e, $eventData]);
+        }
+
+        $action = $this->onFailure;
+
+        $result = $this->onFailure !== null ? $this->executeAction($action) : null;
+
+        return $this->wrapResult($result, false);
     }
 
     /**
@@ -216,7 +248,7 @@ class ServiceWrapper
         }
     }
 
-    private function wrapResult(mixed $result, bool $success): mixed
+    private function wrapResult(mixed $result, bool|null $success): mixed
     {
         if (!$this->wrapServiceResult) return $result;
 
