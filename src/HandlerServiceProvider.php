@@ -19,8 +19,14 @@ class HandlerServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->loadTranslateFiles();
         $this->bootPublishFiles();
         $this->bootMigrationCacheFlush();
+    }
+
+
+    private function loadTranslateFiles(): void{
+        $this->loadTranslationsFrom(__DIR__ . '/lang', 'handler');
 
     }
 
