@@ -6,19 +6,20 @@ return [
     | FetchData
     |--------------------------------------------------------------------------
     |
-    | pagination             => default number of items per page. Higher numbers may
-    |                           affect server performance; 50 is the suggested value.
-    | limit-pagination       => hard cap for items per page (also applied to the value
-    |                           requested by the client). Set it to false to disable the cap.
-    | search_input_field     => request input that holds the search keyword.
-    | per_page_query         => request input that holds the requested page size.
-    | default_order_by       => column used when no (valid) ordering is requested.
-    | default_sort_direction => 'asc' or 'desc'.
-    |
-    | The HANDLER_* environment variables take priority; the older PAGINATE_*
-    | names are still honoured as a fallback.
+    | pagination                => default number of items per page. Higher numbers may
+    |                              affect server performance; 50 is the suggested value.
+    | limit-pagination          => hard cap for items per page (also applied to the value
+    |                              requested by the client). Set it to false to disable the cap.
+    | search_input_field        => request input that holds the search keyword.
+    | search_input_field_length => maximum number of characters of the search keyword that
+    |                              are used; longer keywords are cut. Values below 1 are raised
+    |                              to 1 and the value can never exceed 1000.
+    | per_page_query            => request input that holds the requested page size.
+    | default_order_by          => column used when no (valid) ordering is requested.
+    | default_sort_direction    => 'asc' or 'desc'.
     |
     */
+
     'pagination' => env('HANDLER_PAGINATION', 50),
 
     'limit-pagination' => env('HANDLER_LIMIT_PAGINATION', 250),
@@ -57,7 +58,7 @@ return [
 
     'service_result' => env('HANDLER_USE_RESULT_SERVICE', true),
 
-    "service_result_class" => \Teksite\Handler\Data\ServiceResult::class,
+    'service_result_class' => \Teksite\Handler\Data\ServiceResult::class,
 
     'connection' => env('HANDLER_DB_CONNECTION') ?? env('DB_CONNECTION'),
 
@@ -76,7 +77,7 @@ return [
     |
     */
 
-    "success_event_class" => "Teksite\\Handler\\Events\\OnSuccessEvent",
+    'success_event_class' => \Teksite\Handler\Events\OnSuccessEvent::class,
 
-    "failure_event_class" => "Teksite\\Handler\\Events\\OnFailureEvent",
+    'failure_event_class' => \Teksite\Handler\Events\OnFailureEvent::class,
 ];

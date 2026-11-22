@@ -14,12 +14,12 @@ interface FetchDataContract
 {
     public function get(
         string|Model|Builder|Relation|Closure $model,
-        string|array|null                     $searchColumns = null,
-        array|string                          $only = null,
-        int|false|null                        $perPage = null,
-        int|false|null                        $limitPagination = null,
-        array                                 $with = [],
-        array                                 $withCount = []
+        string|array|null $searchColumns = null,
+        array|string|null $only = null,
+        int|false|null $perPage = null,
+        int|false|null $limitPagination = null,
+        array $with = [],
+        array $withCount = []
     ): Collection|LengthAwarePaginator;
 
 

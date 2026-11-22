@@ -68,11 +68,7 @@ class ServiceWrapper
     }
 
     /**
-     * @param bool        $hasTransaction
-     * @param bool        $wrapServiceResult
-     * @param bool        $withHandler
-     * @param string|null $connection
-     * @return self
+     * Any argument left null falls back to the matching `handler.*` config value.
      */
     public static function make(?bool $hasTransaction = null, ?bool $wrapServiceResult = null, ?bool $withHandler = null, ?string $connection = null): self
     {
@@ -84,11 +80,19 @@ class ServiceWrapper
         );
     }
 
+    /**
+     * Same as make(), but the action always runs inside a DB transaction,
+     * whatever `handler.transaction` is set to.
+     */
     public static function withDbTransaction(?bool $wrapServiceResult = null, ?bool $withHandler = null, ?string $connection = null): self
     {
         return self::make(true, $wrapServiceResult, $withHandler, $connection);
     }
 
+    /**
+     * Same as make(), but the action never runs inside a DB transaction,
+     * whatever `handler.transaction` is set to.
+     */
     public static function withoutDbTransaction(?bool $wrapServiceResult = null, ?bool $withHandler = null, ?string $connection = null): self
     {
         return self::make(false, $wrapServiceResult, $withHandler, $connection);
@@ -147,7 +151,6 @@ class ServiceWrapper
     {
         if ($this->onSuccess === null) throw new LogicException("The 'do' closure must be set before calling run.");
 
-
         $eventData = array_merge($this->eventData, $additionalEventData);
 
         try {
@@ -159,7 +162,7 @@ class ServiceWrapper
             return $this->handleFailure($e, $dispatchFailureEvent, $eventData);
         }
 
-        if ($dispatchSuccessEvent) {
+        if ($dispatchSuccessEvent){
             $this->dispatchEvent(
                 config('handler.success_event_class'),
                 SuccessEventContract::class,
@@ -174,7 +177,7 @@ class ServiceWrapper
     /**
      * Runs the success closure, optionally wrapped in a DB transaction on the configured connection.
      *
-     * @throws \Throwable
+     * @throws Throwable
      */
     private function executeWithTransaction(): mixed
     {
@@ -211,9 +214,7 @@ class ServiceWrapper
             $this->dispatchEvent(config('handler.failure_event_class'), FailureEventContract::class, [$e, $eventData]);
         }
 
-        $action = $this->onFailure;
-
-        $result = $this->onFailure !== null ? $this->executeAction($action) : null;
+        $result = $this->onFailure !== null ? $this->executeAction($this->onFailure) : null;
 
         return $this->wrapResult($result, false);
     }

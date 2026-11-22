@@ -480,7 +480,7 @@ class FetchDataService implements FetchDataContract
         if ($keyword === '') return $query;
 
         $charLimit = (int)config('handler.search_input_field_length', self::MAX_SEARCH_KEYWORD_LENGTH);
-        $keyword = mb_substr($keyword, 0, min($charLimit, 1000));
+        $keyword = mb_substr($keyword, 0, min(max(1 , $charLimit), 1000));
 
         $driver = $query->getQuery()->getConnection()->getDriverName();
 
