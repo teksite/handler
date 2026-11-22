@@ -4,7 +4,6 @@ namespace Teksite\Handler\Services;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Routing\Redirector;
 use InvalidArgumentException;
 use Teksite\Handler\Enums\ResponseType;
 
