@@ -5,7 +5,7 @@ All notable changes to `teksite/handler` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [Semantic Versioning](https://semver.org/).
 Entries for versions before 4.0.0 are reconstructed from the GitHub release notes and the commit history.
 
-## [4.0.0]
+## [3.1.0]
 
 A security, performance and readability overhaul. It contains breaking changes, so read the **Changed** and **Removed** sections before upgrading.
 
